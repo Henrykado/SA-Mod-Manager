@@ -1,44 +1,63 @@
-﻿using ModManagerCommon.Controls;
-using ModManagerWPF.Updater;
-using Octokit;
-using System;
+﻿using SAModManager.Updater;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
 
-namespace ModManagerWPF.Common
+namespace SAModManager.Common
 {
 	/// <summary>
 	/// Interaction logic for ModChangelog.xaml
 	/// </summary>
 
-
 	public partial class ModChangelog : Window
-	{ 
-		ModUpdateDetails modUpdateDetails;
+	{
+		public class ModChangeLogData
+		{
+			public string filename { get; set; }
+			public string status { get; set; }
+		}
+
+		ObservableCollection<ModChangeLogData> modchangeData { get; set; } = new();
 		private readonly List<ModDownloadWPF> mods;
 
 		public List<ModDownloadWPF> SelectedMods { get; } = new();
 
+		public void SetData(ModDownloadWPF entry)
+		{
+			if (entry == null)
+			{
+				// Download details
+				FileSize.Text = null;
+				FileCount.Text = null;
+				// Release details	
+				UpdateName.Text = null;
+				UpdateTag.Text = null;
+
+			}
+			else
+			{
+				// Download details
+				PublishedDate.Text = entry.Updated.ToString(CultureInfo.CurrentCulture);
+				FileSize.Text = SizeSuffix.GetSizeSuffix(entry.Size);
+				FileCount.Text = entry.FilesToDownload.ToString();
+
+				UpdateName.Text = entry.Name;
+				UpdateTag.Text = entry.Version;
+			}
+
+			BtnOpenUpdate.IsEnabled = !string.IsNullOrEmpty(entry.ReleaseUrl);
+		}
+
 		private void SetModDetails(ModDownloadWPF entry)
 		{
-			modUpdateDetails = new();
 			textChangeLog.Text = entry?.Changes.Trim();
-			modUpdateDetails.SetData(entry);
+			SetData(entry);
 
 			FilesList.BeginInit();
-			FilesList.Items.Clear();
 
 			if (entry?.Type.Equals(ModDownloadType.Modular) == true)
 			{
@@ -47,7 +66,14 @@ namespace ModManagerWPF.Common
 				foreach (ModManifestDiff i in entry.ChangedFiles)
 				{
 					string file = i.State == ModManifestState.Moved ? $"{i.Last.FilePath} -> {i.Current.FilePath}" : i.Current.FilePath;
-					FilesList.Items.Add(new { State = i.State.ToString(), File = file });
+
+					ModChangeLogData data = new()
+					{
+						filename = file,
+						 status = i.State.ToString(),
+					};
+
+					modchangeData.Add(data);
 				}
 
 				// Auto-resize columns based on content
@@ -65,7 +91,10 @@ namespace ModManagerWPF.Common
 				tabPageFiles.IsEnabled = false;
 			}
 
+			FilesList.ItemsSource = modchangeData;
 			FilesList.EndInit();
+
+			DataContext = modchangeData;
 		}
 
 		private void AdjustDetailsDisplay(ModDownloadWPF mod)
@@ -107,7 +136,7 @@ namespace ModManagerWPF.Common
 			ModsList.EndInit();
 		}
 
-		private void ImageButton_Click(object sender, RoutedEventArgs e)
+		private void DLButton_Click(object sender, RoutedEventArgs e)
 		{
 			foreach (ModDownloadWPF item in mods)
 			{
@@ -145,52 +174,21 @@ namespace ModManagerWPF.Common
 			this.Close();
 		}
 
-		public partial class ModUpdateDetails : UserControl
+		private void BtnOpenUpdate_Click(object sender, RoutedEventArgs e)
 		{
-			public ModUpdateDetails()
-			{
-				SetData(null);
-			}
+			var item = ModsList.SelectedItem;
 
-			public void SetData(ModDownloadWPF entry)
+			var entry = item as ModDownloadWPF;
+
+			if (entry != null)
 			{
-				if (entry == null)
+				var ps = new ProcessStartInfo(entry.ReleaseUrl)
 				{
-					// Download details
-					/*PublishedDate.Text = null;
-					FileSize.Text = null;
-					FileCount.Text = null;
-
-					// Release details
-					labelReleasePublished.Text = null;
-					linkRelease.Text = null;
-					UpdateName.Text = null;
-					UpdateTag.Text = null;*/
-				}
-				else
-				{
-					// Download details
-					/*PublishedDate.Text = entry.Updated.ToString(CultureInfo.CurrentCulture);
-					FileSize.Text = SizeSuffix.GetSizeSuffix(entry.Size);
-					FileCount.Text = entry.FilesToDownload.ToString();
-
-					// Release details
-					//labelReleasePublished.Text = entry.Published.ToString(CultureInfo.CurrentCulture);
-					//linkRelease.Text = entry.ReleaseUrl;
-					UpdateName.Text = entry.Name;
-					UpdateTag.Text = entry.Version;*/
-				}
-
-			//	linkRelease.Enabled = !string.IsNullOrEmpty(linkRelease.Text);
-				//Enabled = entry != null;
+					UseShellExecute = true,
+					Verb = "open"
+				};
+				Process.Start(ps);
 			}
-
-			/*private void linkRelease_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
-			{
-				Process.Start(linkRelease.Text);
-			}*/
 		}
-	}
-
-	
+	}	
 }

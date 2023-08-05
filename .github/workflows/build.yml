@@ -1,0 +1,50 @@
+name: Windows Build and Publish
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  # Path to the WPF project file relative to the root of the project.
+  WPF_PROJECT_FILE: ./ModManagerWPF/SAModManager.csproj
+
+jobs:
+  build:
+    name: ${{matrix.configuration}}
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        configuration: [Release]
+
+    steps:
+    - uses: actions/checkout@v3.3.0
+
+    - name: Add Git hash to resources
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      run: echo ${{github.sha}} > ModManagerWPF/Resources/Version.txt
+
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v1.3.1
+
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: '7.x' # Use a valid .NET SDK version here
+
+    - name: Restore NuGet packages
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      run: nuget restore ${{env.WPF_PROJECT_FILE}}
+
+    - name: Build
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      run: msbuild /m /p:Configuration=${{matrix.configuration}} ${{env.WPF_PROJECT_FILE}}
+
+    - name: Publish WPF application
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      run: dotnet publish -c Release -f net7.0-windows
+      
+    - uses: actions/upload-artifact@v3.1.2
+      with:
+        name: ModManagerWPF-${{matrix.configuration}}
+        path: ${{github.workspace}}/publish

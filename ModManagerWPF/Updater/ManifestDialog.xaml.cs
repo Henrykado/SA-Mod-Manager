@@ -1,5 +1,4 @@
-﻿using ModManagerCommon;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -9,7 +8,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 
-namespace ModManagerWPF.Updater
+namespace SAModManager.Updater
 {
 	/// <summary>
 	/// Interaction logic for ManifestDialog.xaml
@@ -18,7 +17,7 @@ namespace ModManagerWPF.Updater
 	{
 		private readonly string modPath;
 		private readonly string manifestPath;
-		private readonly CancellationTokenSource tokenSource = new CancellationTokenSource();
+		private readonly CancellationTokenSource tokenSource = new();
 
 		private List<ModManifestEntry> manifest;
 		public List<ModManifestDiff> Diff { get; private set; }

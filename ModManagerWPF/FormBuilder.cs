@@ -12,15 +12,14 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Xml.Linq;
 using GongSolutions.Wpf.DragDrop.Utilities;
-using ModManagerWPF.Common;
-using ModManagerWPF.Properties;
-using ModManagerWPF.Elements;
-using Xceed.Wpf.Toolkit;
-using Xceed.Wpf.Toolkit.PropertyGrid.Editors;
+using SAModManager.Common;
+using SAModManager.Properties;
+using SAModManager.Elements;
 using System.Windows.Media;
 using System.Windows.Data;
+using System.Windows.Media.Animation;
 
-namespace ModManagerWPF
+namespace SAModManager
 {
 	public class FormBuilder
 	{
@@ -64,7 +63,6 @@ namespace ModManagerWPF
 
 			return members;
 		}
-
 
 		public static UIElement CreateComboBox(ConfigSchemaProperty property, List<ConfigSchemaEnum> enums, CustomPropertyStore storeInfo)
 		{
@@ -152,9 +150,10 @@ namespace ModManagerWPF
 				HorizontalAlignment = HorizontalAlignment.Right,
 				//MinValue = (double)storeInfo.GetConfigMinValue(),
 				//MaxValue = (double)storeInfo.GetConfigMaxValue(),
+				Tag = storeInfo
 			};
 
-			//element.ValueChanged += ModSetting_intElementChanged;
+			element.ValueChanged += ModSetting_NumericElementChanged;
 			panel.Children.Add(element);
 
 			Grid.SetColumn(panel.Children[0], 0);
@@ -329,7 +328,6 @@ namespace ModManagerWPF
 
 			return stack;
 		}
-
 		#endregion
 
 		#region Mod Config Description
@@ -374,32 +372,17 @@ namespace ModManagerWPF
 		{
 			CheckBox chk = (CheckBox)sender;
 			var info = chk.Tag as CustomPropertyStore;
-			if (info != null) 
-			{
+			if (info != null)
 				settings.SetPropertyValue(info.groupName, info.propertyName, chk.IsChecked.Value.ToString());
-			}
 		}
 
-		private static void ModSetting_intElementChanged(object sender, RoutedEventArgs e)
+		private static void ModSetting_NumericElementChanged(object sender, RoutedEventArgs e)
 		{
-			IntegerUpDown number = (IntegerUpDown)sender;
+			NumericUpDown box = (NumericUpDown)sender;
 
-			var info = number.Tag as CustomPropertyStore;
-			if (info != null)
-			{
-				settings.SetPropertyValue(info.groupName, info.propertyName, number.Value.ToString());
-			}
-		}
-
-		private static void ModSetting_floatElementChanged(object sender, RoutedEventArgs e)
-		{
-			DecimalUpDown number = (DecimalUpDown)sender;
-
-			var info = number.Tag as CustomPropertyStore;
-			if (info != null)
-			{
-				settings.SetPropertyValue(info.groupName, info.propertyName, number.Value.ToString());
-			}
+			var info = box.Tag as CustomPropertyStore;
+			if ( info != null )
+				settings.SetPropertyValue(info.groupName, info.propertyName, box.Value.ToString());
 		}
 
 		private static void ModSetting_stringElementChanged(object sender, RoutedEventArgs e)
@@ -408,9 +391,7 @@ namespace ModManagerWPF
 
 			var info = text.Tag as CustomPropertyStore;
 			if (info != null)
-			{
 				settings.SetPropertyValue(info.groupName, info.propertyName, text.Text);
-			}
 		}
 
 		#endregion

@@ -1,25 +1,12 @@
-﻿using ModManagerCommon;
-using ModManagerWPF.Common;
+﻿using SAModManager.Common;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net;
-using System.Security.Policy;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 
-namespace ModManagerWPF.Updater
+namespace SAModManager.Updater
 {
 
 	/// <summary>
@@ -29,19 +16,36 @@ namespace ModManagerWPF.Updater
 	{
 		private readonly Uri uri;
 		private readonly string fileName;
-		private readonly string dest = "SATemp";
+		private string dest = ".SATemp";
 		private bool defaultFolder = false;
 		private readonly CancellationTokenSource tokenSource = new();
+		private bool install = false;
+		public bool done = false;
+		private bool silent = false;
 
-		public GenericDownloadDialog(Uri uri, string title, string fileName, bool defaultFolder = false)
+		public GenericDownloadDialog(Uri uri, string title, string fileName, bool defaultFolder = false, string dest = null, bool silent = false, bool install = false)
 		{
 			InitializeComponent();
 
-			Title = "Download - " + title;
+			if (silent)
+				Hide();
+
+			Title = (!install ? "Download - " : "Install - ") + title;
 			DLInfo.Text += " " + title + "...";
 			this.fileName = fileName;
 			this.uri = uri;
 			this.defaultFolder = defaultFolder;
+			this.install = install;
+			this.silent = silent;
+
+			if (!string.IsNullOrEmpty(dest))
+			{
+				this.dest = dest;
+			}
+			else if (!defaultFolder)
+			{
+				Directory.CreateDirectory(dest);
+			}
 
 			if (!defaultFolder)
 			{
@@ -54,7 +58,6 @@ namespace ModManagerWPF.Updater
 				}
 				catch { }
 			}
-
 		}
 
 		private void WebClient_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
@@ -69,40 +72,53 @@ namespace ModManagerWPF.Updater
 		{
 			Application.Current.Dispatcher.Invoke(() =>
 			{
-				DLInfo.Text = "Download completed.";
+				DLInfo.Text = install ? "Install Completed" : "Download completed." +"\n Copying files...";
 
 			});
 
-			await Task.Delay(500);
-			if (File.Exists(fileName) && !defaultFolder) 
-			{ 
-				Util.MoveFile(fileName, Path.Combine(dest, fileName));
-			}
 
-			await Task.Delay(1000);
+			await Task.Delay(200);
+
+			await Application.Current.Dispatcher.Invoke(async () =>
+			{
+				if (File.Exists(fileName) && !defaultFolder && dest is not null)
+				{
+					await Util.MoveFile(fileName, Path.Combine(dest, fileName), true);
+				}
+
+				done = true;
+			});
+
+
 			Application.Current.Dispatcher.Invoke(() =>
 			{
-				DialogResult = true;
-				this.Close();
+				if (dest is not null && File.Exists(fileName) && !defaultFolder)
+					File.Delete(fileName);
+
+				if (!silent)
+					this.Close();
 			});
 		}
 
-		public async void StartDL()
+		public async Task StartDL()
 		{
-			
+
 			using (var client = new UpdaterWebClient())
 			{
 				CancellationToken token = tokenSource.Token;
 				client.DownloadProgressChanged += WebClient_DownloadProgressChanged;
 				client.DownloadFileCompleted += WebClient_DownloadFileCompleted;
-	
+
 				bool retry = false;
+
+				if (silent)
+					Hide();
 
 				do
 				{
 					try
 					{
-						await Task.Run(() => client.DownloadFileAsync(this.uri, fileName));
+						await Task.Run(() => client.DownloadFileTaskAsync(this.uri, fileName));
 					}
 					catch (AggregateException ae)
 					{
@@ -118,7 +134,6 @@ namespace ModManagerWPF.Updater
 						});
 					}
 				} while (retry == true);
-
 
 			}
 		}

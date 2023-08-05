@@ -1,11 +1,6 @@
-﻿using IniFile;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using SAModManager.Ini;
 
-namespace ModManagerWPF.Game
+namespace SAModManager.Game
 {
 	//System.Threading.Thread controllerThread;
 
@@ -16,7 +11,6 @@ namespace ModManagerWPF.Game
 		Normal,
 		Low
 	}
-
 
 	public class GameConfig
 	{

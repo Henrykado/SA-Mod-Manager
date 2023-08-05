@@ -1,30 +1,64 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using ModManagerWPF.Properties;
+﻿using System.Threading.Tasks;
+using SAModManager.Properties;
 using Octokit;
+using Newtonsoft.Json;
 
-
-namespace ModManagerWPF
+namespace SAModManager
 {
-	public class GitHub
+	public class GitHubUser
 	{
-		MainWindow Window { get; set; }
-		public GitHub(MainWindow window)
-		{
-			Window = window;
-		}
-		public GitHubClient client = new GitHubClient(new ProductHeaderValue("sadx-mod-loader"));
+		[JsonProperty("login")]
+		public string Login { get; set; }
+		[JsonProperty("html_url")]
+		public string HtmlUrl { get; set; }
+	}
 
-		public string LastCommit = "";
-		public async Task<Repository> GetRepo()
+	public class GitHubAsset
+	{
+		[JsonProperty("name")]
+		public string Name { get; set; }
+		[JsonProperty("uploader")]
+		public GitHubUser Uploader { get; set; }
+		[JsonProperty("size")]
+		public long Size { get; set; }
+		[JsonProperty("updated_at")]
+		public string Uploaded { get; set; }
+		[JsonProperty("browser_download_url")]
+		public string DownloadUrl { get; set; }
+	}
+
+	public class GitHubRelease
+	{
+		[JsonProperty("prerelease")]
+		public bool PreRelease { get; set; }
+		[JsonProperty("draft")]
+		public bool Draft { get; set; }
+		[JsonProperty("html_url")]
+		public string HtmlUrl { get; set; }
+		[JsonProperty("name")]
+		public string Name { get; set; }
+		[JsonProperty("tag_name")]
+		public string TagName { get; set; }
+		[JsonProperty("published_at")]
+		public string Published { get; set; }
+		[JsonProperty("assets")]
+		public GitHubAsset[] Assets { get; set; }
+		[JsonProperty("body")]
+		public string Body { get; set; }
+	}
+
+	public static class GitHub
+	{
+
+		public static GitHubClient client = new(new ProductHeaderValue("sadx-mod-loader"));
+
+		public static string LastCommit = "";
+		public static async Task<Repository> GetRepo()
 		{
 			return await client.Repository.Get("x-hax", "sadx-mod-loader");
 		}
 
-		private async Task<GitHubCommit> GetLastCommit(long repoID, string branchName)
+		private static async Task<GitHubCommit> GetLastCommit(long repoID, string branchName)
 		{
 			return await client.Repository.Commit.Get(repoID, branchName);
 		}
@@ -33,35 +67,34 @@ namespace ModManagerWPF
 		/// Gets the most recent commit to the repo.
 		/// </summary>
 		/// <returns>Most Recent Commit as a string</returns>
-		public async Task GetRecentCommit()
+		public static async Task<string> GetRecentCommit()
 		{
 
 			if (client is null)
-				return;
+				return null;
 
 			try
 			{
 				var Repo = await client.Repository.Get("x-hax", "sadx-mod-loader");
 
 				if (Repo is null)
-					return;
+					return null;
 
 				var id = Repo.Id;
 				var lastCommit = await GetLastCommit(id, "wpf"); //todo swap to "master"
 
 				if (lastCommit is not null)
 				{
-					LastCommit = lastCommit.Sha[..7];
-					Window.SetModManagerVersion();	
-					return;
+				
+					return LastCommit = lastCommit.Sha[..7];
 				}
 			}
 			catch
 			{
-
-				LastCommit = Settings.Default.LastCommit;
-				Window.SetModManagerVersion();
+				return LastCommit = Settings.Default.LastCommit;	
 			}
+
+			return LastCommit = Settings.Default.LastCommit;
 		}
 	}
 }

@@ -1,15 +1,56 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using IniFile;
-using ModManagerCommon;
+using SAModManager.Ini;
 
-namespace ModManagerWPF
+namespace SAModManager
 {
-	class SADXLoaderInfo : LoaderInfo
+	public enum GameType
+	{
+		SADX,
+		SA2
+	}
+
+	public enum UpdateUnit
+	{
+		Always,
+		Hours,
+		Days,
+		Weeks,
+	}
+
+	public class LoaderInfo
+	{
+		[DefaultValue(true)]
+		public bool UpdateCheck { get; set; } = true;
+		[DefaultValue(true)]
+		public bool ModUpdateCheck { get; set; } = true;
+
+		[DefaultValue(UpdateUnit.Weeks)]
+		public UpdateUnit UpdateUnit { get; set; } = UpdateUnit.Weeks;
+		[DefaultValue(1)]
+		public int UpdateFrequency { get; set; } = 1;
+
+		[DefaultValue(0)] public long UpdateTime { get; set; }
+		[DefaultValue(0)] public long ModUpdateTime { get; set; }
+
+		[DefaultValue(true)]
+		public bool AutoClose { get; set; } = true;
+
+		[IniName("Mod")]
+		[IniCollection(IniCollectionMode.NoSquareBrackets, StartIndex = 1)]
+		public List<string> Mods { get; set; }
+		[IniName("Code")]
+		[IniCollection(IniCollectionMode.NoSquareBrackets, StartIndex = 1)]
+		public List<string> EnabledCodes { get; set; }
+
+		public LoaderInfo()
+		{
+			Mods = new List<string>();
+			EnabledCodes = new List<string>();
+		}
+	}
+
+	public class SADXLoaderInfo : LoaderInfo
 	{
 		enum FillMode
 		{
@@ -29,7 +70,6 @@ namespace ModManagerWPF
 
 		public bool? ShowConsole { get { return null; } set { if (value.HasValue) DebugConsole = value.Value; } }
 
-		public bool DisableCDCheck { get; set; }
 
 		[DefaultValue(640)]
 		public int HorizontalResolution { get; set; } = 640;
@@ -178,8 +218,9 @@ namespace ModManagerWPF
 		public bool LightFix { get; set; }
 		[DefaultValue(true)]
 		public bool KillGbix { get; set; }
+		public bool DisableCDCheck { get; set; }
 
-	#endregion
+		#endregion
 
 		public SADXLoaderInfo()
 		{

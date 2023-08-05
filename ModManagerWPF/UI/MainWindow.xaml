@@ -1,12 +1,11 @@
 ﻿<Window x:Name="MainWindowManager" 
-		x:Class="ModManagerWPF.MainWindow"
+		x:Class="SAModManager.MainWindow"
 		xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
 		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 		xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 		xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-		xmlns:local="clr-namespace:ModManagerWPF"
-		xmlns:elements="clr-namespace:ModManagerWPF.Elements"
-		xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
+		xmlns:local="clr-namespace:SAModManager"
+		xmlns:elements="clr-namespace:SAModManager.Elements"
 		xmlns:dd="urn:gong-wpf-dragdrop"
 		mc:Ignorable="d"
 		Title="SADX Mod Manager"
@@ -394,7 +393,7 @@
 											<StackPanel Grid.Column="0" Grid.ColumnSpan="5" Grid.Row="3" Orientation="Horizontal">
 												<elements:NumericUpDown x:Name="txtResX" Height="22" Width="75" Value="640"/>
 												<Label Content="x" VerticalContentAlignment="Center"/>
-												<elements:NumericUpDown x:Name="txtResY" Height="22" Width="75" Value="480"/>
+												<elements:NumericUpDown x:Name="txtResY" Height="22" Width="75" Value="480" ValueChanged="ResolutionChanged"/>
                                             </StackPanel>
                                             <ComboBox x:Name="comboDisplay" Grid.Column="5" Grid.Row="3" Height="22" SelectionChanged="comboResolutionPreset_SelectedIndexChanged">
                                                 <ComboBoxItem Content="640x480"/>
@@ -413,7 +412,7 @@
                                         </Grid>
 
                                         <!--Graphics Display Middle-->
-                                        <GroupBox Header="Settings" Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="3">
+                                        <GroupBox Header="{DynamicResource Manager.Tabs.GameConfig.Tabs.Graphics.Group.Display.Settings}" Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="3">
                                             <Grid Margin="5,5,5,5">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="25"/>
@@ -445,14 +444,14 @@
                                                     <CheckBox x:Name="chkRatio" Content="{DynamicResource Manager.Tabs.GameConfig.Tabs.Graphics.Group.Display.Check.ForceRatio}" Grid.Column="0" Grid.Row="0" VerticalAlignment="Center" Margin="5" ToolTip="{DynamicResource MainWindow.Tips.Tab.GameConfig.Tab.Graphics.43Ratio}" Click="chkRatio_Click" />
                                                     <CheckBox x:Name="chkVSync" Content="{DynamicResource Manager.Tabs.GameConfig.Tabs.Graphics.Group.Display.Check.VSync}" Grid.Column="1" Grid.Row="0" VerticalAlignment="Center" Margin="5" IsChecked="True" ToolTip="{DynamicResource MainWindow.Tips.Tab.GameConfig.Tab.Graphics.VSync}"/>
                                                     <CheckBox x:Name="chkPause" Content="{DynamicResource Manager.Tabs.GameConfig.Tabs.Graphics.Group.Display.Check.Pause}" Grid.Column="2" Grid.Row="0" VerticalAlignment="Center" Margin="5" ToolTip="{DynamicResource MainWindow.Tips.Tab.GameConfig.Tab.Graphics.Pause}"/>
-                                                    <CheckBox x:Name="chkDynamicBuffers" Content="{DynamicResource Manager.Tabs.GameConfig.Tabs.Graphics.Group.Display.Check.Buffers}" Grid.Column="0" Grid.Row="2" VerticalAlignment="Center" Margin="5" ToolTip="{DynamicResource MainWindow.Tips.Tab.GameConfig.Tab.Graphics.DynamicBuffers}"/>
+                                                    <CheckBox x:Name="chkDynamicBuffers" Content="{DynamicResource Manager.Tabs.GameConfig.Tabs.Graphics.Group.Display.Check.Buffers}" Grid.Column="0" Grid.Row="2" VerticalAlignment="Center" Margin="5" ToolTip="{DynamicResource MainWindow.Tips.Tab.GameConfig.Tab.Graphics.DynamicBuffers}" />
                                                 </Grid>
 
 
                                                 <Separator Grid.Column="0" Grid.ColumnSpan="5" Grid.Row="1" VerticalAlignment="Center"/>
 
                                                 <RadioButton x:Name="radFullscreen" Content="{DynamicResource Manager.Tabs.GameConfig.Tabs.Graphics.Group.Display.Radio.Fullscreen}" Grid.Column="1" VerticalAlignment="Center" Grid.Row="2" Margin="5,5,5,5" IsChecked="False" ToolTip="{DynamicResource MainWindow.Tips.Tab.GameConfig.Tab.Graphics.Fullscreen}"/>
-                                                <CheckBox x:Name="chkBorderless" Content="{DynamicResource Manager.Tabs.GameConfig.Tabs.Graphics.Group.Check.BorderlessFullscreen}" Grid.Column="2" Grid.ColumnSpan="2" Grid.Row="2" VerticalAlignment="Center" Margin="5,5,5,5" ToolTip="{DynamicResource MainWindow.Tips.Tab.GameConfig.Tab.Graphics.Borderless}"/>
+                                                <CheckBox x:Name="chkBorderless" Content="{DynamicResource Manager.Tabs.GameConfig.Tabs.Graphics.Group.Check.BorderlessFullscreen}" Grid.Column="2" Grid.ColumnSpan="2" Grid.Row="2" VerticalAlignment="Center" Margin="5,5,5,5" ToolTip="{DynamicResource MainWindow.Tips.Tab.GameConfig.Tab.Graphics.Borderless}" Click="chkBorderless_Checked"/>
                                                 <CheckBox x:Name="chkScaleScreen" Content="{DynamicResource Manager.Tabs.GameConfig.Tabs.Graphics.Group.Check.ScaleScreen}" Grid.Column="3" Grid.Row="2" VerticalAlignment="Center" Margin="5,5,5,5" IsChecked="True" ToolTip="{DynamicResource MainWindow.Tips.Tab.GameConfig.Tab.Graphics.ScaleScreen}"/>
 
                                                 <Separator Grid.Column="0" Grid.ColumnSpan="5" Grid.Row="3" VerticalAlignment="Center"/>
@@ -464,7 +463,7 @@
                                                 <StackPanel Grid.Column="3" Grid.Row="5" Orientation="Horizontal" Margin="5,0,5,0">
 													<elements:NumericUpDown x:Name="txtCustomResX" Height="22" Width="75" Value="640"/>
                                                     <Label Content="x" VerticalContentAlignment="Center"/>
-													<elements:NumericUpDown x:Name="txtCustomResY" Height="22" Width="75" Value="480" TextChanged="txtCustomResY_TextChanged"/>
+													<elements:NumericUpDown x:Name="txtCustomResY" Height="22" Width="75" Value="480" ValueChanged="ResolutionChanged"/>
                                                 </StackPanel>
                                             </Grid>
                                         </GroupBox>
@@ -841,7 +840,7 @@
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="10"/>
                     </Grid.RowDefinitions>
-                    <Border Margin="4,4,4,4" Grid.ColumnSpan="3" Grid.RowSpan="3" BorderThickness="4"/>
+                    <Border Margin="4,4,4,4" CornerRadius="2" Grid.ColumnSpan="3" Grid.RowSpan="3" BorderThickness="4" BorderBrush="{DynamicResource Borders.Brushes.Border}"/>
 
                     <Grid Grid.Column="1" Grid.Row="1">
                         <Grid.ColumnDefinitions>

@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace ModManagerWPF.Properties {
+namespace SAModManager.Properties {
     using System;
     
     
@@ -39,7 +39,7 @@ namespace ModManagerWPF.Properties {
         internal static global::System.Resources.ResourceManager ResourceManager {
             get {
                 if (object.ReferenceEquals(resourceMan, null)) {
-                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("ModManagerWPF.Properties.Resources", typeof(Resources).Assembly);
+                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("SAModManager.Properties.Resources", typeof(Resources).Assembly);
                     resourceMan = temp;
                 }
                 return resourceMan;
@@ -57,6 +57,82 @@ namespace ModManagerWPF.Properties {
             }
             set {
                 resourceCulture = value;
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] bass {
+            get {
+                object obj = ResourceManager.GetObject("bass", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] d3d8m {
+            get {
+                object obj = ResourceManager.GetObject("d3d8m", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] SADXModLoader {
+            get {
+                object obj = ResourceManager.GetObject("SADXModLoader", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] SDL2 {
+            get {
+                object obj = ResourceManager.GetObject("SDL2", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to https://github.com/X-Hax/sadx-mod-loader/raw/wpf/ModManagerWPF/Resources/bass.zip.
+        /// </summary>
+        internal static string URL_BASS {
+            get {
+                return ResourceManager.GetString("URL_BASS", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to https://github.com/X-Hax/sadx-mod-loader/raw/wpf/ModManagerWPF/Resources/d3d8m.dll.
+        /// </summary>
+        internal static string URL_D3D8M {
+            get {
+                return ResourceManager.GetString("URL_D3D8M", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to https://github.com/X-Hax/sadx-mod-loader/raw/wpf/ModManagerWPF/Resources/SADXModLoader.dll.
+        /// </summary>
+        internal static string URL_SADX_DL {
+            get {
+                return ResourceManager.GetString("URL_SADX_DL", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to https://github.com/X-Hax/sadx-mod-loader/raw/wpf/ModManagerWPF/Resources/SDL2.dll.
+        /// </summary>
+        internal static string URL_SDL {
+            get {
+                return ResourceManager.GetString("URL_SDL", resourceCulture);
             }
         }
     }

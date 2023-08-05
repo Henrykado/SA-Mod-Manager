@@ -1,4 +1,4 @@
-﻿using ModManagerCommon;
+﻿
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -8,9 +8,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using Newtonsoft.Json;
-using IniFile;
+using SAModManager.Ini;
 
-namespace ModManagerWPF.Updater
+namespace SAModManager.Updater
 {
 	public class ModUpdater
 	{
@@ -206,7 +206,7 @@ namespace ModManagerWPF.Updater
 
 			try
 			{
-				Dictionary<string, Dictionary<string, string>> dict = IniFile.IniFile.Load(client.OpenRead(url));
+				Dictionary<string, Dictionary<string, string>> dict = IniFile.Load(client.OpenRead(url));
 				remoteInfo = IniSerializer.Deserialize<ModInfo>(dict);
 			}
 			catch (Exception ex)

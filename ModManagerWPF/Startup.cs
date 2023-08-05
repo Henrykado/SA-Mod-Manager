@@ -1,6 +1,5 @@
-﻿using ModManagerCommon;
-using ModManagerWPF.Common;
-using ModManagerWPF.Updater;
+﻿using SAModManager.Common;
+using SAModManager.Updater;
 using NetCoreInstallChecker;
 using NetCoreInstallChecker.Structs.Config;
 using NetCoreInstallChecker.Structs.Config.Enum;
@@ -8,14 +7,15 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Reflection;
-using System.Security.Policy;
-using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms;
-using static System.Net.Mime.MediaTypeNames;
+using System.Reflection;
+using SevenZipExtractor;
+using System.IO.Compression;
+using System.Windows.Controls;
+using System.Windows.Data;
+using Octokit;
 
-namespace ModManagerWPF
+namespace SAModManager
 {
 
 	public class Startup
@@ -69,7 +69,7 @@ namespace ModManagerWPF
 				}
 
 				FrameworkDownloader frameworkDownloader = new(framework.NuGetVersion, framework.FrameworkName);
-				var url = await frameworkDownloader.GetDownloadUrlAsync(Architecture.x86);
+				var url = await frameworkDownloader.GetDownloadUrlAsync(Environment.Is64BitOperatingSystem ? Architecture.Amd64 : Architecture.x86);
 				Uri uri = new(url + "\r\n");
 
 				if (url != null)
@@ -88,15 +88,54 @@ namespace ModManagerWPF
 		private static async Task DownloadAndInstallAsync(Uri uri)
 		{
 			var DL = new GenericDownloadDialog(uri, "Net Core 7.0", "NET7Install.exe");
-			DL.StartDL();
+
+			await DL.StartDL();
 			DL.ShowDialog();
 
-			// Asynchronous operation using async/await
-			await Process.Start(new ProcessStartInfo(Path.Combine("SATemp", "NET7Install.exe"), "/install /passive /norestart")
+			if (DL.done)
 			{
-				UseShellExecute = true,
-				Verb = "runas"
-			}).WaitForExitAsync();
+				// Asynchronous operation using async/await
+				await Process.Start(new ProcessStartInfo(Path.Combine("SATemp", "NET7Install.exe"), "/install /passive /norestart")
+				{
+					UseShellExecute = true,
+					Verb = "runas"
+				}).WaitForExitAsync();
+			}
+		}
+
+		private static async Task SetLanguageFirstBoot()
+		{
+			ComboBox comboLanguage = new()
+			{
+				Name = "comboLanguageS",
+				DisplayMemberPath = ".",
+				SelectedIndex = 0,
+				SelectedItem = 0,
+				VerticalAlignment = System.Windows.VerticalAlignment.Center,
+				HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+				Margin = new(5, 0, 5, 0),
+			};
+
+			Binding itemsSourceBinding = new("LangList")
+			{
+				Source = App.Current
+			};
+			BindingOperations.SetBinding(comboLanguage, ComboBox.ItemsSourceProperty, itemsSourceBinding);
+			Binding selectedItemBinding = new("CurrentLang")
+			{
+				Source = App.Current
+			};
+			BindingOperations.SetBinding(comboLanguage, ComboBox.SelectedItemProperty, selectedItemBinding);
+			comboLanguage.SelectedIndex = 0;
+
+			var langMsg = new MessageWindow("Select a Language", "Please select a language to use.", comboLanguage, MessageWindow.Buttons.OK);
+			langMsg.ShowDialog();
+
+			if (langMsg.isOK == true)
+			{
+				App.SwitchLanguage();
+			}
+			await Task.Delay(20);
 		}
 
 		private static async Task<bool> VC_DependenciesCheck()
@@ -113,79 +152,52 @@ namespace ModManagerWPF
 
 					if (dialog.isYes)
 					{
-		
+
 						Uri uri = new(VCURLs[i] + "\r\n");
 						var DL = new GenericDownloadDialog(uri, "Visual C++", "vc_redist.x86.exe");
-						DL.StartDL();
+
+						await DL.StartDL();
 						DL.ShowDialog();
 
-						// Asynchronous operation using async/await
-						await Process.Start(new ProcessStartInfo(Path.Combine("SATemp", "vc_redist.x86.exe"), "/install /passive /norestart")
+						if (DL.done)
 						{
-							UseShellExecute = true,
-							Verb = "runas"
-						}).WaitForExitAsync();
+							// Asynchronous operation using async/await
+							await Process.Start(new ProcessStartInfo(Path.Combine("SATemp", "vc_redist.x86.exe"), "/install /passive /norestart")
+							{
+								UseShellExecute = true,
+								Verb = "runas"
+							}).WaitForExitAsync();
+						}
 
-						
 						return false;
 					}
 
 				}
 			}
 
-
 			return true;
 		}
 
 		private static async Task<bool> UpdateDependenciesFolder()
 		{
-			string appDataLocalPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-			string managerConfigFolderPath = Path.Combine(appDataLocalPath, "SAManager");
-			string configPath = Path.Combine(managerConfigFolderPath, "config.ini");
-			string extLibPath = Path.Combine(managerConfigFolderPath, "extlib");
-			string bassFullPath = Path.Combine(managerConfigFolderPath, Path.Combine(extLibPath, "BASS"));
-			string SDLFullPath = Path.Combine(managerConfigFolderPath, Path.Combine(extLibPath, "SDL2"));
-			bool bassAndSDL = (Directory.Exists(bassFullPath) && Directory.Exists(SDLFullPath));
+			string configPath = Path.Combine(App.ConfigFolder, "config.ini");
 
 			try
 			{
-				//look if dependencies are already in appData folder
-				if (bassAndSDL && File.Exists(configPath))
+				GamesInstall.SetDependencyPath();
+
+				if (!Directory.Exists(App.ConfigFolder))
 				{
-					return true;
+					Directory.CreateDirectory(App.ConfigFolder);
 				}
 
-				if (!Directory.Exists(managerConfigFolderPath))
+				if (!File.Exists(configPath)) //If config page isn't found, assume this is the first boot.
 				{
-					Directory.CreateDirectory(managerConfigFolderPath);
-				}
-
-				if (!File.Exists(configPath)) //it's the first time the Mod Manager is launched, implement one click install.
-				{
-					await EnableOneClickInstall();
+					await EnableOneClickInstall(); 
 					File.Create(configPath);
-
-					if (bassAndSDL)
-						return true;
+					await SetLanguageFirstBoot();
+				
 				}
-
-				//if not, look if they aren't in the Mod Manager folder...
-				if (!Directory.Exists("extlib/BASS"))
-				{
-					//throw error that they are missing
-					return false;
-				}
-
-				if (!Directory.Exists("extlib/SDL2"))
-				{
-					//throw error that they are missing
-					return false;
-				}
-
-				Util.CopyFolder("extlib/BASS", bassFullPath, true);
-				Util.CopyFolder("extlib/SDL2/lib/x86", SDLFullPath, true);
-
-				await Task.Delay(500);
 			}
 			catch
 			{
@@ -199,9 +211,9 @@ namespace ModManagerWPF
 		{
 			try
 			{
-				if (Directory.Exists("SATemp"))
+				if (Directory.Exists(".SATemp"))
 				{
-					Directory.Delete("SATemp", true);
+					Directory.Delete(".SATemp", true);
 				}
 			}
 			catch { }
@@ -209,14 +221,14 @@ namespace ModManagerWPF
 
 		public static async Task<bool> StartupCheck()
 		{
+			await UpdateDependenciesFolder();
+
 			Console.WriteLine("Checking dependencies...");
 
 			bool net7 = await Net7Check();
 
 			if (net7)
 			{
-				await UpdateDependenciesFolder();
-
 				if (await VC_DependenciesCheck() == false)
 					return false;
 

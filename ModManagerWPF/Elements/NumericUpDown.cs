@@ -1,15 +1,12 @@
-﻿using System.Globalization;
-using System.Windows.Controls.Primitives;
+﻿using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows;
 using System.Windows.Controls;
 using System.Text.RegularExpressions;
-using System;
-using Gu.Wpf.NumericInput;
-using ModManagerCommon;
 
-namespace ModManagerWPF.Elements
+
+namespace SAModManager.Elements
 {
 	public partial class NumericUpDown : TextBox
 	{
@@ -17,6 +14,8 @@ namespace ModManagerWPF.Elements
 		private RepeatButton incrementButton;
 		private RepeatButton decrementButton;
 		private TextBox textBox;
+		private bool incrementLoaded = false;
+		private bool decrementLoaded = false;
 		#endregion
 
 		public enum DataType
@@ -63,6 +62,15 @@ namespace ModManagerWPF.Elements
 		public static readonly DependencyProperty MinValueProperty =
 			DependencyProperty.Register("MinValue", typeof(double), typeof(NumericUpDown), new PropertyMetadata(double.NegativeInfinity));
 
+		public RoutedEventHandler ValueChanged
+		{
+			get { return (RoutedEventHandler)GetValue(ValueChangedProperty); }
+			set { SetValue(ValueChangedProperty, value); }
+		}
+
+		public static readonly DependencyProperty ValueChangedProperty =
+			DependencyProperty.Register("ValueChanged", typeof(RoutedEventHandler), typeof(NumericUpDown));
+
 		#endregion
 
 		public NumericUpDown()
@@ -78,13 +86,22 @@ namespace ModManagerWPF.Elements
 		{
 			incrementButton = Template.FindName("IncrementUp", this) as RepeatButton;
 			decrementButton = Template.FindName("IncrementDown", this) as RepeatButton;
-			textBox = Template.FindName("NumValue", this) as TextBox;
 
 			if (incrementButton != null)
-				incrementButton.Click += IncrementUp_Click;
+				if (!incrementLoaded)
+				{
+					incrementButton.Click += IncrementUp_Click;
+					incrementLoaded = true;
+				}
 
 			if (decrementButton != null)
-				decrementButton.Click += IncrementDown_Click;
+				if (!decrementLoaded)
+				{
+					decrementButton.Click += IncrementDown_Click;
+					decrementLoaded = true;
+				}
+
+			textBox = Template.FindName("NumValue", this) as TextBox;
 
 			Binding textBinding = new Binding("Value")
 			{
@@ -115,6 +132,8 @@ namespace ModManagerWPF.Elements
 				else if (newValue > max)
 					textBox.Value = max;
 			}
+
+			textBox.ValueChanged?.Invoke(textBox, new RoutedEventArgs());
 		}
 
 		private void NumValue_PreviewMouseWheel(object sender, MouseWheelEventArgs e)

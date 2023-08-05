@@ -1,6 +1,5 @@
-﻿using ModManagerCommon;
-using ModManagerWPF.Languages;
-using ModManagerWPF.Themes;
+﻿using SAModManager.Languages;
+using SAModManager.Themes;
 using System;
 using System.Collections.Generic;
 using System.IO.Pipes;
@@ -12,16 +11,10 @@ using System.Linq;
 using System.Windows.Threading;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Navigation;
-using System.Runtime.InteropServices.ComTypes;
-using System.Text.RegularExpressions;
-using System.Windows.Controls.Primitives;
-using System.Windows.Data;
-using System.Windows.Input;
-using System.Globalization;
-using System.Diagnostics;
+using SAModManager.Common;
+using SAModManager.Updater;
 
-namespace ModManagerWPF
+namespace SAModManager
 {
 	/// <summary>
 	/// Interaction logic for App.xaml
@@ -32,9 +25,11 @@ namespace ModManagerWPF
 	{
 		private const string pipeName = "sa-mod-manager";
 		private const string protocol = "sadxmm:";
+		public static readonly string ConfigFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SAManager");
+		public static readonly string extLibPath = Path.Combine(ConfigFolder, "extlib");
 
 		private static readonly Mutex mutex = new(true, pipeName);
-		public static UriQueue UriQueue;
+		public static Updater.UriQueue UriQueue;
 
 		public static LangEntry CurrentLang { get; set; }
 		public static LanguageList LangList { get; set; }
@@ -123,6 +118,7 @@ namespace ModManagerWPF
 					using var k4 = k3.CreateSubKey("open");
 					using var k5 = k4.CreateSubKey("command");
 					k5.SetValue(null, $"\"{Environment.ProcessPath}\" \"%1\"");
+					key.Close();
 					return true;
 				}
 			}
@@ -177,7 +173,7 @@ namespace ModManagerWPF
 
 		public static async Task<bool> ExecuteDependenciesCheck()
 		{
-			return await ModManagerWPF.Startup.StartupCheck();
+			return await SAModManager.Startup.StartupCheck();
 		}
 
 		protected override async void OnStartup(StartupEventArgs e)
@@ -217,6 +213,7 @@ namespace ModManagerWPF
 				return;
 			}
 
+	
 			InitUri(args, alreadyRunning);
 
 			if (alreadyRunning)
@@ -225,9 +222,12 @@ namespace ModManagerWPF
 				return;
 			}
 
+			Steam.Init();
 			ShutdownMode = ShutdownMode.OnMainWindowClose;
+
 			MainWindow = new MainWindow(args is not null ? args : null);
 			MainWindow.Show();
+	
 			base.OnStartup(e);
 			UriQueue.Close();
 		}

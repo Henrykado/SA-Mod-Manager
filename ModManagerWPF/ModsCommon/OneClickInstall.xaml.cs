@@ -1,27 +1,15 @@
-﻿using ModManagerCommon.Forms;
-using ModManagerCommon;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
-using ModManagerWPF.Themes;
-using System.Drawing;
-using System.Windows.Media;
-using System.Linq;
-using System.Windows.Documents;
-using System.Security.Policy;
-using Octokit;
-using System.Xml.Linq;
+using SAModManager.Themes;
 using System.IO;
-using ModManagerWPF.Common;
-using System.Windows.Interop;
+using SAModManager.Common;
 using System.Diagnostics;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using System.Threading;
 using System.Threading.Tasks;
-using ModManagerWPF.Updater;
+using SAModManager.Updater;
 
-namespace ModManagerWPF
+namespace SAModManager
 {
 	/// <summary>
 	/// Interaction logic for OneClickInstall.xaml
@@ -29,6 +17,7 @@ namespace ModManagerWPF
 	public partial class OneClickInstall : Window
 	{
 
+		private string urlPage;
 		private Uri url;
 		private GameBananaItem gbi;
 		private string author;
@@ -61,6 +50,7 @@ namespace ModManagerWPF
 
 			try
 			{
+
 				itemType = fields["gb_itemtype"];
 				itemId = long.Parse(fields["gb_itemid"]);
 			}
@@ -77,6 +67,7 @@ namespace ModManagerWPF
 
 			try
 			{
+				urlPage = "https://gamebanana.com/mods/" + itemId.ToString();
 				gbi = GameBananaItem.Load(itemType, itemId);
 
 				if (gbi is null)
@@ -85,6 +76,7 @@ namespace ModManagerWPF
 				}
 
 				TextModName.Text = gbi.Name;
+
 				string color = GetNewColor("Colors.Text");
 				TextModDescription.Text = "<p style=\"color:" + color + ";\">" + gbi.Body + "</p>";
 
@@ -206,7 +198,10 @@ namespace ModManagerWPF
 
 		private void OpenGB_Click(object sender, RoutedEventArgs e)
 		{
-			var ps = new ProcessStartInfo("https://github.com/X-Hax/sadx-mod-loader")
+			if (string.IsNullOrEmpty(urlPage))
+				return;
+
+			var ps = new ProcessStartInfo(urlPage)
 			{
 				UseShellExecute = true,
 				Verb = "open"
@@ -262,7 +257,7 @@ namespace ModManagerWPF
 				new ModDownloadWPF(dummyInfo, dummyPath, url.AbsoluteUri, null, 0)
 			};
 
-			new Updater.ModDownloadDialogWPF(updates, updatePath).ShowDialog();
+			new ModDownloadDialogWPF(updates, updatePath).ShowDialog();
 
 
 			await Task.Delay(2000);

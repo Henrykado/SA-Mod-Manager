@@ -1,19 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 
 
-namespace ModManagerWPF.Common
+namespace SAModManager.Common
 {
 	/// <summary>
 	/// Interaction logic for MessageWindow.xaml
@@ -73,7 +66,7 @@ namespace ModManagerWPF.Common
 		/// Returns true when OK has been pressed.
 		/// </summary>
 		public bool isOK { get { return Accepted; } }
-		
+
 
 		/// <summary>
 		/// Constructs a MessageWindow using preset Icons.
@@ -84,7 +77,7 @@ namespace ModManagerWPF.Common
 		/// <param name="button"></param>
 		/// <param name="width"></param>
 		/// <param name="height"></param>
-		public MessageWindow(string windowName, string ErrorText, WindowType type=WindowType.IconMessage, Icons icon=Icons.Caution, Buttons button=Buttons.OK, double width=40, double height=40, string headerText="")
+		public MessageWindow(string windowName, string ErrorText, WindowType type = WindowType.IconMessage, Icons icon = Icons.Caution, Buttons button = Buttons.OK, double width = 40, double height = 40, string headerText = "")
 		{
 			InitializeComponent();
 
@@ -108,7 +101,7 @@ namespace ModManagerWPF.Common
 		/// <param name="button"></param>
 		/// <param name="width"></param>
 		/// <param name="height"></param>
-		public MessageWindow(string windowName, string messageText, Image image, WindowType type = WindowType.IconMessage, Buttons button=Buttons.OK, double width=40, double height=40, string headerText="")
+		public MessageWindow(string windowName, string messageText, Image image, WindowType type = WindowType.IconMessage, Buttons button = Buttons.OK, double width = 40, double height = 40, string headerText = "")
 		{
 			InitializeComponent();
 
@@ -116,6 +109,24 @@ namespace ModManagerWPF.Common
 			image.Height = height;
 
 			InitializeMessageWindow(windowName, messageText, headerText, image, button, type);
+		}
+
+		public MessageWindow(string windowName, string messageText, UIElement list, Buttons button = Buttons.OK, double width = 40, double height = 40, string headerText = "")
+		{
+			InitializeComponent();
+
+			DrawingImage drawing = GetIcon(Icons.Information);
+			Image image = new()
+			{
+				Source = drawing,
+				Width = width,
+				Height = height
+			};
+
+			image.Width = width;
+			image.Height = height;
+			ExtraUIGrid.Children.Add(list);
+			InitializeMessageWindow(windowName, messageText, headerText, image, button, WindowType.IconMessage);
 		}
 
 		//add line break to avoid having a width way too big for the Message Window
@@ -132,7 +143,7 @@ namespace ModManagerWPF.Common
 				int substringLength = Math.Min(max, remainingLength);
 				string substring = s.Substring(index, substringLength);
 
-				if (substringLength == max) 
+				if (substringLength == max)
 				{
 					int breakIndex = substring.LastIndexOfAny(new[] { ' ', '\n' }); //look for the next whitespace / line break
 
@@ -195,20 +206,32 @@ namespace ModManagerWPF.Common
 				case Buttons.OK:
 					ButtonLeft.Visibility = Visibility.Hidden;
 					ButtonRight.Content = Lang.GetString("CommonStrings.OK");
+					ButtonRight.Click += ButtonYes_Click;
 					break;
 				case Buttons.OKCancel:
 					ButtonLeft.Content = Lang.GetString("CommonStrings.OK");
+					ButtonLeft.Click += ButtonYes_Click;
 					ButtonRight.Content = Lang.GetString("CommonStrings.Cancel");
+					ButtonRight.Click += ButtonClick;
 					break;
 				case Buttons.YesNo:
 					ButtonLeft.Content = Lang.GetString("CommonStrings.Yes");
+					ButtonLeft.Click += ButtonYes_Click;
 					ButtonRight.Content = Lang.GetString("CommonStrings.No");
+					ButtonRight.Click += ButtonClick;
 					break;
 				case Buttons.RetryCancel:
 					ButtonLeft.Content = Lang.GetString("CommonStrings.Retry");
+					ButtonLeft.Click += ButtonLeft_Click;
 					ButtonRight.Content = Lang.GetString("CommonStrings.Cancel");
+					ButtonRight.Click += ButtonClick;
 					break;
 			}
+		}
+
+		private void ButtonLeft_Click(object sender, RoutedEventArgs e)
+		{
+			throw new NotImplementedException();
 		}
 
 		private void SetupWindow(string messageText, string headerText, WindowType windowType, Image image)

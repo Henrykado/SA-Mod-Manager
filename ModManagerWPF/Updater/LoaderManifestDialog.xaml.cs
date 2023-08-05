@@ -1,5 +1,4 @@
-﻿using ModManagerCommon;
-using ModManagerWPF.Common;
+﻿using SAModManager.Common;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -19,7 +18,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
-namespace ModManagerWPF.Updater
+namespace SAModManager.Updater
 {
 	/// <summary>
 	/// Interaction logic for LoaderManifestDialog.xaml
@@ -142,7 +141,7 @@ namespace ModManagerWPF.Updater
 			Close();
 		}
 
-		private void RemoveEmptyDirectories(IEnumerable<ModManifestEntry> oldManifest, IEnumerable<ModManifestEntry> newManifest)
+		private static void RemoveEmptyDirectories(IEnumerable<ModManifestEntry> oldManifest, IEnumerable<ModManifestEntry> newManifest)
 		{
 			foreach (string dir in ModManifest.GetOldDirectories(oldManifest, newManifest))
 			{

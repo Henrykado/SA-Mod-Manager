@@ -3,7 +3,7 @@ name: Windows Build and Publish
 on:
   push:
     branches:
-      - master
+      - wpf-public-demo
 
 env:
   # Path to the WPF project file relative to the root of the project.

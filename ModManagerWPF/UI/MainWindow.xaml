@@ -329,7 +329,7 @@
             <!--This Tab is for Game Configuration.-->
             <TabItem x:Name="tabGame" Header="{DynamicResource Manager.Tabs.GameConfig}" Margin="0,0,0,0" TextBlock.TextAlignment="Center" Tag="{DynamicResource MainWindow.Tips.Tab.GameConfig}">
                 <Grid>
-                    
+
                 </Grid>
             </TabItem>
 

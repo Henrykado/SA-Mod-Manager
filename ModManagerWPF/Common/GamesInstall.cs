@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -19,9 +21,13 @@ namespace SAModManager.Common
 		public string exeName;
 		public string gameDirectory;
 		public string modDirectory;
+		public string ProfilesDirectory { get; set; }
 		public List<Dependencies> Dependencies { get; set; }
 		public Loader loader { get; set; }
-	}
+        public string defaultIniProfile;
+		public string LastLoadedProfile { get; set; }
+		public List<string> GameConfigFile { get; set; } // Strings due to SA2 having multiple config files.
+    }
 
 	public enum Format
 	{
@@ -38,28 +44,12 @@ namespace SAModManager.Common
 		public string URL;
 	}
 
-	public class DependenciesInstall
-	{
-		public bool isDependencyInstalled(Game game)
-		{
-			if (game is null)
-				return false;
-
-			foreach (var dependency in game.Dependencies)
-			{
-				if (!Directory.Exists(dependency.path))
-					return false;
-			}
-
-			return true;
-		}
-	}
-
 	public class Loader
 	{
 		public string name;
 		public byte[] data;
 		public string URL;
+		public bool installed = false;
 	}
 
 	public static class GamesInstall
@@ -69,22 +59,11 @@ namespace SAModManager.Common
 			return File.Exists(Path.Combine(dependency.path, dependency.name + ".dll"));
 		}
 
-		public static async Task<bool> AllDependenciesInstalled(Game game)
-		{
-			foreach (var dependency in game.Dependencies)
-			{
-				if (!DependencyInstalled(dependency))
-					return false;
-			}
-
-			return true;
-		}
-
 		public static void SetDependencyPath()
 		{
 			foreach (var game in GetSupportedGames())
 			{
-				if (game is null)
+				if (game is null || game.Dependencies is null)
 					continue;
 
 				foreach (var dependency in game.Dependencies)
@@ -188,6 +167,7 @@ namespace SAModManager.Common
 			gameName = "Sonic Adventure DX",
 			exeList = new() { "sonic.exe", "Sonic Adventure DX.exe" },
 			exeName = "sonic.exe",
+			defaultIniProfile = "SADXModLoader.ini",
 
 			loader = new()
 			{
@@ -223,12 +203,40 @@ namespace SAModManager.Common
 					URL = Properties.Resources.URL_D3D8M,
 				},
 			},
+
+			ProfilesDirectory = Path.Combine(App.ConfigFolder, "SADX"),
+
+			GameConfigFile = new()
+			{
+				"sonicDX.ini"
+			},
 		};
 
-		public static IEnumerable<Game> GetSupportedGames()
+		public static Game SonicAdventure2 = new()
+		{
+			gameName = "Sonic Adventure 2",
+			exeName = "sonic2app.exe",
+            defaultIniProfile = "SA2ModLoader.ini",
+
+            loader = new()
+			{
+				name = "SA2ModLoader",
+			},
+
+			ProfilesDirectory = Path.Combine(App.ConfigFolder, "SA2"),
+
+			GameConfigFile = new()
+			{
+				"Config/Keyboard.cfg",
+				"Config/UserConfig.cfg"
+			},
+		};
+
+        public static IEnumerable<Game> GetSupportedGames()
 		{
 			yield return SonicAdventure;
-		}
+            yield return SonicAdventure2;
+        }
 
 		public static async Task GetSADXModInstaller()
 		{

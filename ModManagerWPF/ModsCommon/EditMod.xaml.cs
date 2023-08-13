@@ -88,7 +88,7 @@ namespace SAModManager
 			else
 			{
 				Title = Lang.GetString("EditMod.Header.NewMod");
-				authorBox.Text = Settings.Default.ModAuthor;
+				authorBox.Text = App.configIni.ModAuthor;
 				versionBox.Text = "0.1";
 				bottomGrid.Children.Remove(checkAdvancedOptions);
 			}
@@ -121,7 +121,7 @@ namespace SAModManager
 		#region Main Window Functions
 		private void okBtn_Click(object sender, RoutedEventArgs e)
 		{
-			string moddir = editMod ? MainWindow.modDirectory : Path.Combine(MainWindow.modDirectory, ValidateFilename(nameBox.Text));
+			string moddir = editMod ? App.CurrentGame.modDirectory : Path.Combine(App.CurrentGame.modDirectory, ValidateFilename(nameBox.Text));
 
 			if (nameBox.Text.Length <= 0)
 			{
@@ -222,7 +222,7 @@ namespace SAModManager
 		public void LoadConfigSchema(string modName)
 		{
 			string fullName = string.Empty;
-			string moddir = editMod ? MainWindow.modDirectory : Path.Combine(MainWindow.modDirectory, ValidateFilename(nameBox.Text));
+			string moddir = editMod ? App.CurrentGame.modDirectory : Path.Combine(App.CurrentGame.modDirectory, ValidateFilename(nameBox.Text));
 
 			if (Mod != null)
 			{
@@ -456,7 +456,7 @@ namespace SAModManager
 
 				if (isStringNotEmpty(authorBox.Text)) //save mod author
 				{
-					Settings.Default.ModAuthor = authorBox.Text;
+					App.configIni.ModAuthor = authorBox.Text;
 				}
 
 				BuildModINI(moddir);

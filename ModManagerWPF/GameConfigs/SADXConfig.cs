@@ -1,9 +1,8 @@
 ﻿using SAModManager.Ini;
+using System.ComponentModel;
 
-namespace SAModManager.Game
+namespace SAModManager.GameConfigs
 {
-	//System.Threading.Thread controllerThread;
-
 	enum FrameRate
 	{
 		Invalid,
@@ -12,40 +11,45 @@ namespace SAModManager.Game
 		Low
 	}
 
-	public class GameConfig
+	public class SADXConfig
 	{
 		[IniName("framerate")]
-		public int FrameRate { get; set; }
+		public int FrameRate { get; set; } = 1;
 		[IniAlwaysInclude]
 		[IniName("fogemulation")]
-		public int Foglation { get; set; }
+		public int Foglation { get; set; } = 0;
 		[IniAlwaysInclude]
 		[IniName("sound3d")]
-		public int Sound3D { get; set; }
+		[DefaultValue(1)]
+		public int Sound3D { get; set; } = 1;
 		[IniAlwaysInclude]
 		[IniName("screensize")]
-		public int ScreenSize { get; set; }
+		public int ScreenSize { get; set; } = 2;
 		[IniAlwaysInclude]
 		[IniName("cliplevel")]
-		public int ClipLevel { get; set; }
+		public int ClipLevel { get; set; } = 0;
 		[IniAlwaysInclude]
 		[IniName("sevoice")]
-		public int SEVoice { get; set; }
+        [DefaultValue(1)]
+        public int SEVoice { get; set; } = 1;
 		[IniAlwaysInclude]
 		[IniName("bgm")]
-		public int BGM { get; set; }
+        [DefaultValue(1)]
+        public int BGM { get; set; } = 1;
 		[IniAlwaysInclude]
 		[IniName("screen")]
-		public int FullScreen { get; set; }
+		public int FullScreen { get; set; } = 0;
 		[IniAlwaysInclude]
 		[IniName("mousemode")]
 		public int MouseMode { get; set; }
 		[IniAlwaysInclude]
 		[IniName("bgmv")]
-		public int BGMVolume { get; set; }
+		[DefaultValue(100)]
+		public int BGMVolume { get; set; } = 100;
 		[IniAlwaysInclude]
 		[IniName("voicev")]
-		public int VoiceVolume { get; set; }
+        [DefaultValue(100)]
+        public int VoiceVolume { get; set; } = 100;
 		[IniName("language")]
 		public int Language { get; set; }
 		[IniName("padconfig")]
@@ -63,10 +67,9 @@ namespace SAModManager.Game
 		public ushort MouseFlute { get; set; }
 	}
 
-	public class GameConfigFile
+	public class SADXConfigFile
 	{
 		[IniName("sonicDX")]
-		public GameConfig GameConfig { get; set; }
-
+		public SADXConfig GameConfig { get; set; } = new();
 	}
 }

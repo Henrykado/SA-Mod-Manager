@@ -1,5 +1,4 @@
 ﻿using SAModManager.Common;
-using SAModManager.UI;
 using SAModManager.Updater;
 using SevenZipExtractor;
 using System;
@@ -7,18 +6,13 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using SAModManager.IniSettings.SADX;
+using System.Windows.Controls.Primitives;
+using SAModManager.GameConfigs;
 
 namespace SAModManager.Elements.SADX
 {
@@ -28,158 +22,33 @@ namespace SAModManager.Elements.SADX
 	public partial class GameConfig : UserControl
 	{
 		#region Variables
+		public GameSettings GameProfile;
+		public Graphics graphics;
+		public List<PatchesData> Patches;
 
-		private string sadxIni = "sonicDX.ini";
-
-		string gamePath = string.Empty;
-		SADXLoaderInfo loaderini;
-
-		private string d3d8to9InstalledDLLName = "d3d8.dll";
-		private string d3d8to9StoredDLLName = "d3d8m.dll";
 		bool suppressEvent = false;
-
+		private static string d3d8to9InstalledDLLName = Path.Combine(App.CurrentGame.gameDirectory, "d3d8.dll");
+		private static string d3d8to9StoredDLLName = Path.Combine(App.extLibPath, "d3d8m", "d3d8m.dll");
 		private readonly double LowOpacityBtn = 0.7;
-
-
-		private Game.GameConfigFile gameConfigFile;
-
-		public Game.Graphics graphics;
+		private SADXConfigFile GameSettings;
 		#endregion
 
-		public GameConfig(SADXLoaderInfo loaderini, string gamePath)
+		public GameConfig(ref object gameSettings, ref object gameConfig)
 		{
 			InitializeComponent();
-			this.loaderini = loaderini;
-			this.gamePath = gamePath;
-			graphics = new Game.Graphics(ref comboScreen);
-
-			Loaded += GameConfig_Loaded;
+			GameProfile = (GameSettings)gameSettings;
+			GameSettings = (SADXConfigFile)gameConfig;
+			graphics = new Graphics(ref comboScreen);
+			SetPatches();
+            Loaded += GameConfig_Loaded;
 		}
 
+		#region Internal Functions
 		private void GameConfig_Loaded(object sender, RoutedEventArgs e)
 		{
 			SetupBindings();
+			SetUp_UpdateD3D9();
 		}
-
-		#region Private Functions
-		private bool SetupBindings()
-		{
-			try
-			{
-				// Graphics Tab Bindings
-				// Screen Settings
-				comboScreen.SetBinding(ComboBox.SelectedIndexProperty, new Binding("ScreenNum")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay,
-				});
-				txtResX.SetBinding(NumericUpDown.ValueProperty, new Binding("HorizontalResolution")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-				txtResY.SetBinding(NumericUpDown.ValueProperty, new Binding("VerticalResolution")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-
-				// Window Settings
-				chkRatio.SetBinding(CheckBox.IsCheckedProperty, new Binding("ForceAspectRatio")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-				chkVSync.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableVsync")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-				chkPause.SetBinding(CheckBox.IsCheckedProperty, new Binding("PauseWhenInactive")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-				chkDynamicBuffers.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDynamicBuffer")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-				// Radio Button Handles
-				chkBorderless.SetBinding(CheckBox.IsCheckedProperty, new Binding("Borderless")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-				chkScaleScreen.SetBinding(CheckBox.IsCheckedProperty, new Binding("StretchFullscreen")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-				chkResizableWin.SetBinding(CheckBox.IsCheckedProperty, new Binding("ResizableWindow")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-				chkCustomWinSize.SetBinding(CheckBox.IsCheckedProperty, new Binding("CustomWindowSize")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-				chkMaintainRatio.SetBinding(CheckBox.IsCheckedProperty, new Binding("MaintainWindowAspectRatio")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-				System.Drawing.Rectangle rect = graphics.GetRectangleStruct();
-				txtCustomResX.MinValue = 0;
-				txtCustomResY.MinValue = 0;
-				txtCustomResX.MaxValue = rect.Width;
-				txtCustomResY.MaxValue = rect.Height;
-				txtCustomResX.SetBinding(NumericUpDown.ValueProperty, new Binding("WindowWidth")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-				txtCustomResY.SetBinding(NumericUpDown.ValueProperty, new Binding("WindowHeight")
-				{
-					Source = loaderini,
-					Mode = BindingMode.TwoWay
-				});
-
-				// Game Config Settings
-
-
-				// Enhancement Settings
-
-
-				// Input Settings
-
-
-				// Audio Settings
-
-
-				// Patches
-
-
-				return true;
-			}
-			catch { return false; }
-		}
-		#endregion
-
-		#region Public Functions
-		public void SaveGameSettings(SADXLoaderInfo managerSettings)
-		{
-			managerSettings.ScreenNum = loaderini.ScreenNum;
-			managerSettings.HorizontalResolution = loaderini.HorizontalResolution;
-			managerSettings.VerticalResolution = loaderini.VerticalResolution;
-
-			managerSettings.ForceAspectRatio = loaderini.ForceAspectRatio;
-			managerSettings.EnableVsync = loaderini.EnableVsync;
-			managerSettings.PauseWhenInactive = loaderini.PauseWhenInactive;
-		}
-		#endregion
 
 		#region Graphics Tab
 		private void ResolutionChanged(object sender, RoutedEventArgs e)
@@ -225,7 +94,7 @@ namespace SAModManager.Elements.SADX
 			{
 				txtResX.IsEnabled = false;
 				decimal resYDecimal = (decimal)txtResY.Value;
-				decimal roundedValue = Math.Round(resYDecimal * Game.Graphics.ratio);
+				decimal roundedValue = Math.Round(resYDecimal * Graphics.ratio);
 				txtResX.Value = (double)roundedValue;
 			}
 			else if (!suppressEvent)
@@ -271,7 +140,10 @@ namespace SAModManager.Elements.SADX
 
 		private void SetUp_UpdateD3D9()
 		{
-			btnUpdateD3D9.IsEnabled = CheckD3D8to9Update();
+			bool isUpdateAvailable = CheckD3D8to9Update();
+
+			btnUpdateD3D9.Visibility = isUpdateAvailable ? Visibility.Visible : Visibility.Hidden;
+			btnUpdateD3D9.IsEnabled = !isUpdateAvailable;
 			checkD3D9.IsEnabled = File.Exists(d3d8to9StoredDLLName);
 			checkD3D9.IsChecked = File.Exists(d3d8to9InstalledDLLName);
 		}
@@ -519,82 +391,126 @@ namespace SAModManager.Elements.SADX
 			PatchDescription.Text = Lang.GetString("CommonStrings.Description");
 		}
 
-		private void SavePatches()
+		private static List<PatchesData> GetPatches(ref ListView list, GameSettings set)
 		{
-			if (listPatches is null)
-				return;
-
-
-			PatchesData patch = (PatchesData)listPatches.Items[14];
-			loaderini.DisableCDCheck = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[13];
-			loaderini.KillGbix = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[12];
-			loaderini.LightFix = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[11];
-			loaderini.PixelOffSetFix = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[10];
-			loaderini.ChaoPanelFix = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[9];
-			loaderini.E102PolyFix = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[8];
-			loaderini.ChunkSpecFix = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[7];
-			loaderini.Chaos2CrashFix = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[6];
-			loaderini.SCFix = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[5];
-			loaderini.FovFix = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[4];
-			loaderini.InterpolationFix = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[3];
-			loaderini.MaterialColorFix = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[2];
-			loaderini.PolyBuff = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[1];
-			loaderini.CCEF = patch.IsChecked;
-			patch = (PatchesData)listPatches.Items[0];
-			loaderini.HRTFSound = patch.IsChecked;
-		}
-
-		private void UpdatePatches()
-		{
-			listPatches.Items.Clear();
-
-			if (loaderini is null)
-				return;
+			list.Items.Clear();
 
 			List<PatchesData> patches = new List<PatchesData>()
 			{
-				new PatchesData() { Name = Lang.GetString("GamePatches.3DSound"),
-					Description = Lang.GetString("GamePatches.3DSoundDesc"), IsChecked = loaderini.HRTFSound },
-				new PatchesData() { Name = Lang.GetString("GamePatches.CamCode"),
-					Description = Lang.GetString("GamePatches.CamCodeDesc"),IsChecked = loaderini.CCEF },
-				new PatchesData() { Name = Lang.GetString("GamePatches.VertexColor"),
-					Description = Lang.GetString("GamePatches.VertexColorDesc"),IsChecked = loaderini.PolyBuff },
-				new PatchesData() { Name = Lang.GetString("GamePatches.MaterialColor"),
-					Description = Lang.GetString("GamePatches.MaterialColorDesc"),IsChecked = loaderini.MaterialColorFix},
-				new PatchesData() { Name = Lang.GetString("GamePatches.Interpolation"),
-					Description = Lang.GetString("GamePatches.InterpolationDesc"),IsChecked = loaderini.InterpolationFix},
-				new PatchesData() { Name = Lang.GetString("GamePatches.FixFOV"),
-					Description = Lang.GetString("GamePatches.FixFOVDesc"),IsChecked = loaderini.FovFix },
-				new PatchesData() { Name = Lang.GetString("GamePatches.Skychase"),
-					Description = Lang.GetString("GamePatches.SkychaseDesc"),IsChecked = loaderini.SCFix },
-				new PatchesData() { Name = Lang.GetString("GamePatches.Chaos2"),
-					Description = Lang.GetString("GamePatches.Chaos2Desc"),IsChecked = loaderini.Chaos2CrashFix },
-				new PatchesData() { Name = Lang.GetString("GamePatches.ChunkRendering"),
-					Description = Lang.GetString("GamePatches.ChunkRenderingDesc"),IsChecked = loaderini.ChunkSpecFix},
-				new PatchesData() { Name = Lang.GetString("GamePatches.E102Lamp"),
-					Description = Lang.GetString("GamePatches.E102LampDesc"),IsChecked = loaderini.E102PolyFix},
-				new PatchesData() { Name = Lang.GetString("GamePatches.ChaoStats"), IsChecked = loaderini.ChaoPanelFix},
-				new PatchesData() { Name = Lang.GetString("GamePatches.PixelOffset"),
-					Description = Lang.GetString("GamePatches.PixelOffsetDesc"),IsChecked = loaderini.PixelOffSetFix},
-				new PatchesData() { Name = Lang.GetString("GamePatches.Lights"),
-					Description = Lang.GetString("GamePatches.LightsDesc"),IsChecked = loaderini.LightFix},
-				new PatchesData() { Name = Lang.GetString("GamePatches.DisableGBIX"),
-					Description = Lang.GetString("GamePatches.DisableGBIXDesc"),IsChecked = loaderini.KillGbix},
-				new PatchesData() { Name = Lang.GetString("GamePatches.DisableCDCheck"), IsChecked = loaderini.DisableCDCheck},
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.3DSound"),
+					Description = Lang.GetString("GamePatches.3DSoundDesc"),
+					IsChecked = set.Patches.HRTFSound
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.CamCode"),
+					Description = Lang.GetString("GamePatches.CamCodeDesc"),
+					IsChecked = set.Patches.KeepCamSettings
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.VertexColor"),
+					Description = Lang.GetString("GamePatches.VertexColorDesc"),
+					IsChecked = set.Patches.FixVertexColorRendering
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.MaterialColor"),
+					Description = Lang.GetString("GamePatches.MaterialColorDesc"),
+					IsChecked = set.Patches.MaterialColorFix
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.Interpolation"),
+					Description = Lang.GetString("GamePatches.InterpolationDesc"),
+					IsChecked = set.Patches.InterpolationFix
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.FixFOV"),
+					Description = Lang.GetString("GamePatches.FixFOVDesc"),
+					IsChecked = set.Patches.FOVFix
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.Skychase"),
+					Description = Lang.GetString("GamePatches.SkychaseDesc"),
+					IsChecked = set.Patches.SkyChaseResolutionFix
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.Chaos2"),
+					Description = Lang.GetString("GamePatches.Chaos2Desc"),
+					IsChecked = set.Patches.Chaos2CrashFix
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.ChunkRendering"),
+					Description = Lang.GetString("GamePatches.ChunkRenderingDesc"),
+					IsChecked = set.Patches.ChunkSpecularFix
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.E102Lamp"),
+					Description = Lang.GetString("GamePatches.E102LampDesc"),
+					IsChecked = set.Patches.E102NGonFix
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.ChaoStats"),
+					Description = Lang.GetString("GamePatches.ChaoStatsDesc"),
+					IsChecked = set.Patches.ChaoPanelFix
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.PixelOffset"),
+					Description = Lang.GetString("GamePatches.PixelOffsetDesc"),
+					IsChecked = set.Patches.PixelOffSetFix
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.Lights"),
+					Description = Lang.GetString("GamePatches.LightsDesc"),
+					IsChecked = set.Patches.LightFix
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.DisableGBIX"),
+					Description = Lang.GetString("GamePatches.DisableGBIXDesc"),
+					IsChecked = set.Patches.KillGBIX
+				},
+
+				new PatchesData()
+				{
+					Name = Lang.GetString("GamePatches.DisableCDCheck"),
+					Description = Lang.GetString("GamePatches.DisableCDCheckDesc"),
+					IsChecked = set.Patches.DisableCDCheck
+				},
 			};
+
+			return patches;
+		}
+
+		public void SetPatches()
+		{
+			listPatches.Items.Clear();
+
+			List<PatchesData> patches = GetPatches(ref listPatches, GameProfile);
 
 			foreach (var patch in patches)
 			{
@@ -625,6 +541,263 @@ namespace SAModManager.Elements.SADX
 		{
 			ICollectionView view = CollectionViewSource.GetDefaultView(listPatches.Items);
 			view.Refresh();
+		}
+		#endregion
+		#endregion
+
+		public static void UpdateD3D8Paths()
+		{
+            d3d8to9InstalledDLLName = Path.Combine(App.CurrentGame.gameDirectory, "d3d8.dll");
+            d3d8to9StoredDLLName = Path.Combine(App.extLibPath, "d3d8m", "d3d8m.dll");
+        }
+
+		public void SavePatches(ref object input)
+		{
+			GameSettings settings = input as GameSettings;
+
+			if (listPatches is null)
+				return;
+
+			PatchesData patch = (PatchesData)listPatches.Items[14];
+
+			settings.Patches.DisableCDCheck = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[13];
+			settings.Patches.KillGBIX = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[12];
+			settings.Patches.LightFix = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[11];
+			settings.Patches.PixelOffSetFix = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[10];
+			settings.Patches.ChaoPanelFix = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[9];
+			settings.Patches.E102NGonFix = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[8];
+			settings.Patches.ChunkSpecularFix = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[7];
+			settings.Patches.Chaos2CrashFix = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[6];
+			settings.Patches.SkyChaseResolutionFix = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[5];
+			settings.Patches.FOVFix = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[4];
+			settings.Patches.InterpolationFix = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[3];
+			settings.Patches.MaterialColorFix = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[2];
+			settings.Patches.FixVertexColorRendering = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[1];
+			settings.Patches.KeepCamSettings = patch.IsChecked;
+			patch = (PatchesData)listPatches.Items[0];
+			settings.Patches.HRTFSound = patch.IsChecked;
+		}
+
+		#region Private Functions
+		private void SetupBindings()
+		{
+			// Graphics Tab Bindings
+			// Screen Settings
+			comboScreen.SetBinding(ComboBox.SelectedIndexProperty, new Binding("SelectedScreen")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay,
+			});
+			txtResX.MinValue = 0;
+			txtResY.MinValue = 0;
+			txtResX.SetBinding(NumericUpDown.ValueProperty, new Binding("HorizontalResolution")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			txtResY.SetBinding(NumericUpDown.ValueProperty, new Binding("VerticalResolution")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+
+			// Window Settings
+			chkRatio.SetBinding(CheckBox.IsCheckedProperty, new Binding("Enable43ResolutionRatio")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			chkVSync.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableVsync")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			chkPause.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnablePauseOnInactive")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			chkDynamicBuffers.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDynamicBuffer")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			chkBorderless.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableBorderless")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			chkScaleScreen.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableScreenScaling")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			chkResizableWin.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableResizableWindow")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			chkCustomWinSize.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableCustomWindow")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			chkMaintainRatio.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableKeepResolutionRatio")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			System.Drawing.Rectangle rect = graphics.GetRectangleStruct();
+			txtCustomResX.MinValue = 0;
+			txtCustomResY.MinValue = 0;
+			txtCustomResX.MaxValue = rect.Width;
+			txtCustomResY.MaxValue = rect.Height;
+			txtCustomResX.SetBinding(NumericUpDown.ValueProperty, new Binding("CustomWindowWidth")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			txtCustomResY.SetBinding(NumericUpDown.ValueProperty, new Binding("CustomWindowHeight")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+
+			// Game Config Settings
+			radFullscreen.SetBinding(RadioButton.IsCheckedProperty, new Binding("FullScreen")
+			{
+				Source = GameSettings.GameConfig,
+				Mode = BindingMode.TwoWay
+			});
+			if (GameSettings.GameConfig.FrameRate == 0)
+				GameSettings.GameConfig.FrameRate = 1;
+			comboFramerate.SetBinding(ComboBox.SelectedIndexProperty, new Binding("FrameRate")
+			{
+				Source = GameSettings.GameConfig,
+				Converter = new IndexOffsetConverter(),
+				Mode = BindingMode.TwoWay,
+			});
+			comboDetail.SetBinding(ComboBox.SelectedIndexProperty, new Binding("ClipLevel")
+			{
+				Source = GameSettings.GameConfig,
+				Mode = BindingMode.TwoWay
+			});
+			comboFog.SetBinding(ComboBox.SelectedIndexProperty, new Binding("Foglation")
+			{
+				Source = GameSettings.GameConfig,
+				Mode = BindingMode.TwoWay
+			});
+			inputMouseDragAccel.SetBinding(RadioButton.IsCheckedProperty, new Binding("MouseMode")
+			{
+				Source = GameSettings.GameConfig,
+				Mode = BindingMode.TwoWay
+			});
+			inputMouseDragHold.IsChecked = (GameSettings.GameConfig.MouseMode == 0) ? true : false;
+
+			// Enhancement Settings
+			comboBGFill.SetBinding(ComboBox.SelectedIndexProperty, new Binding("FillModeBackground")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			comboFMVFill.SetBinding(ComboBox.SelectedIndexProperty, new Binding("FillModeFMV")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			comboTextureFilter.SetBinding(ComboBox.SelectedIndexProperty, new Binding("ModeTextureFiltering")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			comboUIFilter.SetBinding(ComboBox.SelectedIndexProperty, new Binding("ModeUIFiltering")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			checkMipmapping.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableForcedMipmapping")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+			checkUIScale.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableUIScaling")
+			{
+				Source = GameProfile.Graphics,
+				Mode = BindingMode.TwoWay
+			});
+
+			// Input Settings
+			radBetterInput.SetBinding(RadioButton.IsCheckedProperty, new Binding("EnabledInputMod")
+			{
+				Source = GameProfile.Controller,
+				Mode = BindingMode.TwoWay
+			});
+
+			// Audio Settings
+			checkEnableMusic.SetBinding(CheckBox.IsCheckedProperty, new Binding("BGM")
+			{
+				Source = GameSettings.GameConfig,
+				Converter = new BoolIntConverter(),
+				Mode = BindingMode.TwoWay
+			});
+			checkEnableSounds.SetBinding(CheckBox.IsCheckedProperty, new Binding("SEVoice")
+			{
+				Source = GameSettings.GameConfig,
+				Converter = new BoolIntConverter(),
+				Mode = BindingMode.TwoWay
+			});
+			checkBassMusic.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableBassMusic")
+			{
+				Source = GameProfile.Sound,
+				Mode = BindingMode.TwoWay
+			});
+			checkBassSFX.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableBassSFX")
+			{
+				Source = GameProfile.Sound,
+				Mode = BindingMode.TwoWay
+			});
+			checkEnable3DSound.SetBinding(CheckBox.IsCheckedProperty, new Binding("Sound3D")
+			{
+				Source = GameSettings.GameConfig,
+				Converter = new BoolIntConverter(),
+				Mode = BindingMode.TwoWay
+			});
+			sliderMusic.Minimum = 0;
+			sliderMusic.Maximum = 100;
+			sliderMusic.SetBinding(ScrollBar.ValueProperty, new Binding("BGMVolume")
+			{
+				Source = GameSettings.GameConfig,
+				Mode = BindingMode.TwoWay
+			});
+			sliderVoice.Minimum = 0;
+			sliderVoice.Maximum = 100;
+			sliderVoice.SetBinding(ScrollBar.ValueProperty, new Binding("VoiceVolume")
+			{
+				Source = GameSettings.GameConfig,
+				Mode = BindingMode.TwoWay
+			});
+			sliderSFX.Minimum = 0;
+			sliderSFX.Maximum = 100;
+			sliderSFX.SetBinding(ScrollBar.ValueProperty, new Binding("SEVolume")
+			{
+				Source = GameProfile.Sound,
+				Mode = BindingMode.TwoWay
+			});
+
+			// Patches
 		}
 		#endregion
 	}

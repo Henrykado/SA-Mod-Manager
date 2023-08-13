@@ -243,6 +243,7 @@ namespace SAModManager
         private static readonly string owner = "X-Hax";
         private static readonly string repo = "SA-Mod-Manager";
         private static readonly string AppName = "SA Mod Manager";
+        private static readonly string branch = "wpf-public-demo";
 
         public static async Task<GitHubAction> GetLatestAction()
         {
@@ -250,7 +251,7 @@ namespace SAModManager
             {
                 httpClient.DefaultRequestHeaders.Add("User-Agent", AppName);
 
-                string apiUrl = $"https://api.github.com/repos/{owner}/{repo}/actions/runs?per_page=1";
+                string apiUrl = $"https://api.github.com/repos/{owner}/{repo}/actions/runs?branch={branch}&per_page=1";
 
                 HttpResponseMessage response = await httpClient.GetAsync(apiUrl);
 
@@ -329,7 +330,7 @@ namespace SAModManager
         {
             var httpClient = new HttpClient();
 
-            httpClient.DefaultRequestHeaders.Add("User-Agent", AppName); // Replace 'AwesomeApp' with your app name
+            httpClient.DefaultRequestHeaders.Add("User-Agent", AppName); 
             string apiUrl = $"https://api.github.com/repos/{owner}/{repo}/commits?sha" + hash;
 
             HttpResponseMessage response = await httpClient.GetAsync(apiUrl);

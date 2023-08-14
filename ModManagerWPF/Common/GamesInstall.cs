@@ -22,6 +22,7 @@ namespace SAModManager.Common
 		public string ProfilesDirectory { get; set; }
 		public List<Dependencies> Dependencies { get; set; }
 		public Loader loader { get; set; }
+		public string codeURL {get; set;}
         public string defaultIniProfile;
 		public string LastLoadedProfile { get; set; }
 		public List<string> GameConfigFile { get; set; } // Strings due to SA2 having multiple config files.
@@ -52,6 +53,7 @@ namespace SAModManager.Common
 		public string dataDllOriginPath;
 		public string dataDllPath;
 		public string loaderdllpath;
+		public string loaderVersionpath; //used to check version
     }
 
 	public static class GamesInstall
@@ -129,10 +131,9 @@ namespace SAModManager.Common
 				{
                     if (File.Exists(App.CurrentGame.loader.dataDllOriginPath))
                     {
-                       File.Copy(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, true);   
+                       File.Copy(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, true);
+                       return true;
                     }
-
-                    return true;
 				}
 				return false;
             }
@@ -142,6 +143,29 @@ namespace SAModManager.Common
             }
 
 			return false;
+        }
+
+        public static async Task<bool> UpdateCodes(Game game)
+        {
+            if (game is null)
+                return false;
+
+            try
+            {
+				string codePath = Path.Combine(game.modDirectory, "Codes.lst");
+                Uri uri = new(game.codeURL + "\r\n");
+                var dl = new GenericDownloadDialog(uri, "Updating Codes", "Codes.lst", false, game.modDirectory, false, true);
+
+                await dl.StartDL();
+                dl.ShowDialog();
+				return dl.done == true;
+            }
+            catch
+            {
+                Console.WriteLine("Failed to update mod loader\n");
+            }
+
+            return false;
         }
 
         public static async Task CheckAndInstallDependencies(Game game)
@@ -200,13 +224,15 @@ namespace SAModManager.Common
 			exeList = new() { "sonic.exe", "Sonic Adventure DX.exe" },
 			exeName = "sonic.exe",
 			defaultIniProfile = "SADXModLoader.ini",
+            codeURL = Properties.Resources.URL_SADX_CODE,
 
-			loader = new()
+            loader = new()
 			{
 				name = "SADXModLoader",
 				data = Properties.Resources.SADXModLoader,
 				URL = Properties.Resources.URL_SADX_DL,
 				repoName = "sadx-mod-loader",
+				loaderVersionpath = Path.Combine(App.ConfigFolder, "SADXLoaderVersion.ini"),
             },
 
 			Dependencies = new()
@@ -255,6 +281,7 @@ namespace SAModManager.Common
 			{
 				name = "SA2ModLoader",
                 repoName = "sa2-mod-loader",
+                loaderVersionpath = Path.Combine(App.ConfigFolder, "SA2LoaderVersion.ini"),
             },
 
 			ProfilesDirectory = Path.Combine(App.ConfigFolder, "SA2"),

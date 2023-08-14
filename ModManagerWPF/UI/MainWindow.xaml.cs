@@ -110,13 +110,21 @@ namespace SAModManager
 			SetGameUI();
 			SetBindings();
 
-            if (await App.PerformUpdateManagerCheck() || await App.PerformUpdateLoaderCodesCheck())
+
+			UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
+			bool managerUpdate = await App.PerformUpdateManagerCheck();
+            if (managerUpdate || await App.PerformUpdateLoaderCodesCheck())
             {
+				if (!managerUpdate)
+					Refresh();
+
                 return;
             }
 
             await CheckForModUpdates();
-		}
+            UIHelper.ToggleImgButton(ref btnCheckUpdates, true);
+            Refresh();
+        }
 
 		private void MainForm_FormClosing(object sender, EventArgs e)
 		{
@@ -585,8 +593,8 @@ namespace SAModManager
 				await ExecuteModsUpdateCheck();
 				await UpdateChecker_DoWorkForced();
 				modUpdater.ForceUpdate = true;
-				btnCheckUpdates.IsEnabled = false;
-			}
+                UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
+            }
 
 		}
 
@@ -924,7 +932,7 @@ namespace SAModManager
 
 		private async void btnCheckUpdates_Click(object sender, RoutedEventArgs e)
 		{
-			btnCheckUpdates.IsEnabled = false;
+			UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
 
 			if (await App.PerformUpdateManagerCheck() || await App.PerformUpdateLoaderCodesCheck())
 			{
@@ -1457,7 +1465,7 @@ namespace SAModManager
 
 		private void UpdateChecker_EnableControls()
 		{
-			btnCheckUpdates.IsEnabled = true;
+			UIHelper.ToggleImgButton(ref btnCheckUpdates, true);
 
 			ModContextChkUpdate.IsEnabled = true;
 			if (ModContextDev is not null)
@@ -1486,7 +1494,7 @@ namespace SAModManager
 
 			Dispatcher.Invoke(() =>
 			{
-				btnCheckUpdates.IsEnabled = false;
+				UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
 				ModContextChkUpdate.IsEnabled = false;
 				ModContextDeleteMod.IsEnabled = false;
 				if (ModContextDev is not null)

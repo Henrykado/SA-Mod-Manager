@@ -102,8 +102,9 @@ namespace SAModManager.Common
 			
 				await dl.StartDL();
 				dl.ShowDialog();
+                await UpdateCodes(App.CurrentGame); //update codes
 
-				if (dl.done == false)
+                if (dl.done == false)
 				{
 					await Util.ExtractEmbeddedDLL(game.loader.data, game.loader.name, game.modDirectory);
 				}

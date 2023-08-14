@@ -102,7 +102,8 @@ namespace SAModManager
 			if (!Directory.Exists(App.CurrentGame.modDirectory) || App.CurrentGame == null)
 			{
 				UI_ToggleGameConfig(false);
-				return;
+				tabTestSpawn.Visibility = Visibility.Collapsed;
+                return;
 			}
 
 			new OneClickInstall(updatePath, App.CurrentGame.modDirectory);
@@ -918,7 +919,7 @@ namespace SAModManager
 					await SetLoaderFile();
 					await InstallLoader(true);
 					await GamesInstall.CheckAndInstallDependencies(App.CurrentGame);
-					UpdateGameConfig(SetGame.SADX);
+					await UpdateGameConfig(SetGame.SADX);
 					Save();
 				}
 				else
@@ -965,7 +966,7 @@ namespace SAModManager
 			{
 				await GamesInstall.InstallLoader(App.CurrentGame);
 				await GamesInstall.CheckAndInstallDependencies(App.CurrentGame);
-				UpdateGameConfig(SetGame.SADX); //To do change with "current selected game" when it's available
+				await UpdateGameConfig(SetGame.SADX); //To do change with "current selected game" when it's available
 			}
 
 
@@ -1085,10 +1086,10 @@ namespace SAModManager
 			{
 				case SetGame.SADX:
 					tabGame.Visibility = Visibility.Visible;
-					gameDebugSettings = (GameProfile as IniSettings.SADX.GameSettings).DebugSettings;
+                    gameDebugSettings = (GameProfile as IniSettings.SADX.GameSettings).DebugSettings;
 					stackPanel = (Grid)tabGame.Content;
 					stackPanel.Children.Add(new Elements.SADX.GameConfig(ref GameProfile, ref gameConfigFile));
-					tsPanel = (Grid)tabTestSpawn.Content;
+                    tsPanel = (Grid)tabTestSpawn.Content;
 					tsPanel.Children.Add(new Elements.SADX.TestSpawn(GameProfile, mods));
 					break;
 				case SetGame.SA2:
@@ -1983,14 +1984,15 @@ namespace SAModManager
 				imgInstall.Source = Icon;
 		}
 
-		private void UpdateGameConfig(SetGame game)
+		private async Task UpdateGameConfig(SetGame game)
 		{
 			Directory.CreateDirectory(App.CurrentGame.ProfilesDirectory);
 			setGame = game; //TO DO get current game somehow
 			LoadGameProfile();
 			LoadGameConfigFile();
 			SetGameUI();
-
+            SetBindings();
+            await Task.Delay(0);
 		}
 
 		private void SetProfileInComboBox()

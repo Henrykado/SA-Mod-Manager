@@ -456,7 +456,7 @@ namespace SAModManager.Elements.SADX
 				return;
 			}
 
-			string executablePath = SelectedMods.Select(item => GameMods[item].EXEFile).FirstOrDefault(item => !string.IsNullOrEmpty(item)) ?? Path.Combine(App.CurrentGame.gameDirectory, App.CurrentGame.exeName);
+			string executablePath = SelectedMods?.Select(item => GameMods[item].EXEFile).FirstOrDefault(item => !string.IsNullOrEmpty(item)) ?? Path.Combine(App.CurrentGame.gameDirectory, App.CurrentGame.exeName);
 
 			string commandLine = GetTestSpawnCommandLine();
 

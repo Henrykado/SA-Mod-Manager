@@ -933,7 +933,7 @@ namespace SAModManager
 			}
 
 			manualModUpdate = true;
-			//await CheckForModUpdates(true);
+			await CheckForModUpdates(true);
 		}
 
 		private void AboutBtn_Click(object sender, RoutedEventArgs e)

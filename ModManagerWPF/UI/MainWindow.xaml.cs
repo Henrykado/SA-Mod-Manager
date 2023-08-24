@@ -23,418 +23,437 @@ using SAModManager.Updater;
 using SAModManager.Elements;
 using SevenZipExtractor;
 using SAModManager.Ini;
-using SAModManager.IniSettings;
+using SAModManager.Configuration;
 using ICSharpCode.AvalonEdit.Editing;
 using SAModManager.IniSettings.SA2;
-using SAModManager.GameConfigs;
 using System.Reflection;
 
 namespace SAModManager
 {
-	/// <summary>
-	/// Interaction logic for MainWindow.xaml
-	/// </summary>
+    /// <summary>
+    /// Interaction logic for MainWindow.xaml
+    /// </summary>
 
-	public partial class MainWindow : Window
-	{
-		#region Variables
-		// Global Window Strings
-		public readonly string titleName = "SA Mod Manager";
-		private readonly string Version = App.VersionString;
-		private static string updatePath = "mods/.updates";
-		string codelstpath = "mods/Codes.lst";
-		string codexmlpath = "mods/Codes.xml";
-		string codedatpath = "mods/Codes.dat";
-		string patchdatpath = "mods/Patches.dat";
+    public partial class MainWindow : Window
+    {
+        #region Variables
+        // Global Window Strings
+        public readonly string titleName = "SA Mod Manager";
+        private readonly string Version = App.VersionString;
+        private static string updatePath = "mods/.updates";
+        string codelstpath = "mods/Codes.lst";
+        string codexmlpath = "mods/Codes.xml";
+        string codedatpath = "mods/Codes.dat";
+        string patchdatpath = "mods/Patches.dat";
 
-		// Shared Variables
-		public SetGame setGame = SetGame.SADX;
-		CodeList mainCodes = null;
-		List<Code> codes = null;
-		public List<CodeData> codesSearch { get; set; }
-		bool suppressEvent = false;
-		private bool manualModUpdate;
-		readonly Updater.ModUpdater modUpdater = new();
-		private object gameConfigFile;
-		private DebugSettings gameDebugSettings;
-		MenuItem ModContextDev { get; set; }
-		private bool displayedManifestWarning;
-		public MainWindowViewModel ViewModel = new();
-		Dictionary<string, string> GameProfiles = new();
-		object GameProfile;
+        // Shared Variables
+        public SetGame setGame = SetGame.None;
+        CodeList mainCodes = null;
+        List<Code> codes = null;
+        protected Timer StatusTimer;
+        public List<CodeData> codesSearch { get; set; }
+        bool suppressEvent = false;
+        private bool manualModUpdate;
+        private bool checkForUpdate = false;
+        readonly Updater.ModUpdater modUpdater = new();
+        private object gameConfigFile;
+        private DebugSettings gameDebugSettings = new();
+        MenuItem ModContextDev { get; set; }
+        private bool displayedManifestWarning;
+        public MainWindowViewModel ViewModel = new();
+		Profiles GameProfiles = new();
+        object GameProfile;
+		private string tempPath = "";
 
-		// TODO: Cleanup the Game Variables and turn type'd variables to objects and cast as needed. Additionally, move anything we can to Game class.
+        // TODO: Make this generic for handling both games. Maybe do it with a custom class for easier management.
+        public Dictionary<string, SADXModInfo> mods = null;
+        private List<string> EnabledMods = new();
+        private List<string> EnabledCodes = new();
+        #endregion
 
-		// SADX Related Variables
-		public static string loaderinipath = "mods/SADXModLoader.ini";
-		public IniSettings.SADX.GameSettings SADXSettings;
-		public Dictionary<string, SADXModInfo> mods = null;
-		SADXLoaderInfo loaderini;
+        public MainWindow()
+        {
+            InitializeComponent();
 
-		// SA2 Related Variables
-		private string SA2SettingsPath;
-		public IniSettings.SA2.GameSettings SA2Settings;
-		#endregion
-
-		public MainWindow()
-		{
-			InitializeComponent();
-
-			LoadSettings();
-			InitCodes();
-			LoadModList();
-
-			UpdateDLLData();
-			SetOneClickBtnState();
-		}
-
-		#region Form: Functions
-		private void MainWindowManager_ContentRendered(object sender, EventArgs e)
-		{
-			this.Resources.MergedDictionaries.Clear(); //this is very important to get Theme and Language swap to work on MainWindow
-		}
-
-		private async void MainWindowManager_Loaded(object sender, RoutedEventArgs e)
-		{
-
-			SetModManagerVersion();
-
-			if (!Directory.Exists(App.CurrentGame.modDirectory) || App.CurrentGame == null)
+			if (App.ManagerSettings.CurrentSetGame > 0)
 			{
-				UI_ToggleGameConfig(false);
-				tabTestSpawn.Visibility = Visibility.Collapsed;
-                return;
+				switch (App.ManagerSettings.CurrentSetGame)
+				{
+					case 1:
+						setGame = SetGame.SADX;
+						break;
+					case 2:
+						setGame = SetGame.SA2;
+						break;
+				}
 			}
+
+            UpdateDLLData();
+        }
+
+        #region Form: Functions
+        private void MainWindowManager_ContentRendered(object sender, EventArgs e)
+        {
+            this.Resources.MergedDictionaries.Clear(); //this is very important to get Theme and Language swap to work on MainWindow
+        }
+
+        private async void MainWindowManager_Loaded(object sender, RoutedEventArgs e)
+        {
+            StatusTimer = new Timer((state) => UpdateManagerStatusText(string.Empty));
+
+            SetModManagerVersion();
+
+			Load();
 
 			new OneClickInstall(updatePath, App.CurrentGame.modDirectory);
 
-			SetGameUI();
-			SetBindings();
+            SetBindings();
 
-
-			UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
-			bool managerUpdate = await App.PerformUpdateManagerCheck();
+#if !DEBUG
+            checkForUpdate = true;
+            UpdateManagerStatusText(Lang.GetString("UpdateStatus.ChkUpdate"));
+            UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
+            bool managerUpdate = await App.PerformUpdateManagerCheck();
             if (managerUpdate || await App.PerformUpdateLoaderCodesCheck())
             {
-				if (!managerUpdate)
-					Refresh();
+                if (!managerUpdate)
+                    Refresh();
 
                 return;
             }
 
             await CheckForModUpdates();
+            checkForUpdate = false;
+#endif
             UIHelper.ToggleImgButton(ref btnCheckUpdates, true);
             Refresh();
         }
 
-		private void MainForm_FormClosing(object sender, EventArgs e)
-		{
-			App.UriQueue.Close();
-			Save_AppUserSettings();
-		}
+        private void MainForm_FormClosing(object sender, EventArgs e)
+        {
+            App.UriQueue.Close();
+            Save_AppUserSettings();
+        }
 
-		private void SaveButton_Click(object sender, RoutedEventArgs e)
-		{
-			Save();
-		}
+        private void SaveButton_Click(object sender, RoutedEventArgs e)
+        {
+            Save();
+        }
 
-		private void SaveAndPlayButton_Click(object sender, RoutedEventArgs e)
-		{
-			Save();
-			StartGame();
-		}
+        private void SaveAndPlayButton_Click(object sender, RoutedEventArgs e)
+        {
+            Save();
+            StartGame();
+        }
 
-		#region Form: Mods Tab Functions
-		private void btnMoveTop_Click(object sender, RoutedEventArgs e)
-		{
-			if (listMods.SelectedItems.Count < 1)
-				return;
+        #region Form: Mods Tab Functions
+        private void btnMoveTop_Click(object sender, RoutedEventArgs e)
+        {
+            if (listMods.SelectedItems.Count < 1)
+                return;
 
-			int index = listMods.SelectedIndex;
+            int index = listMods.SelectedIndex;
 
-			if (index > 0)
-			{
-				var item = ViewModel.Modsdata[index];
-				ViewModel.Modsdata.Remove(item);
-				ViewModel.Modsdata.Insert(0, item);
-			}
-		}
+            if (index > 0)
+            {
+                var item = ViewModel.Modsdata[index];
+                ViewModel.Modsdata.Remove(item);
+                ViewModel.Modsdata.Insert(0, item);
+                listMods.SelectedIndex = 0;
+                listMods.SelectedItem = item;
+                listMods.ScrollIntoView(item);
+            }
+        }
 
-		private void btnMoveUp_Click(object sender, RoutedEventArgs e)
-		{
-			if (listMods.SelectedItems.Count < 1)
-				return;
+        private void btnMoveUp_Click(object sender, RoutedEventArgs e)
+        {
+            if (listMods.SelectedItems.Count < 1)
+                return;
 
-			int index = listMods.SelectedIndex;
+            int index = listMods.SelectedIndex;
 
-			if (index > 0)
-			{
-				var item = ViewModel.Modsdata[index];
-				ViewModel.Modsdata.Remove(item);
-				ViewModel.Modsdata.Insert(index - 1, item);
-			}
-		}
+            if (index > 0)
+            {
+                var item = ViewModel.Modsdata[index];
+                ViewModel.Modsdata.Remove(item);
+                ViewModel.Modsdata.Insert(index - 1, item);
+                listMods.SelectedIndex = index - 1;
+                listMods.SelectedItem = item;
+                listMods.ScrollIntoView(item);
+            }
+        }
 
-		private void btnMoveBottom_Click(object sender, RoutedEventArgs e)
-		{
-			if (listMods.SelectedItems.Count < 1)
-				return;
+        private void btnMoveBottom_Click(object sender, RoutedEventArgs e)
+        {
+            if (listMods.SelectedItems.Count < 1)
+                return;
 
-			int index = listMods.SelectedIndex;
+            int index = listMods.SelectedIndex;
 
-			if (index != listMods.Items.Count - 1)
-			{
-				var item = ViewModel.Modsdata[index];
-				ViewModel.Modsdata.Remove(item);
-				ViewModel.Modsdata.Insert(listMods.Items.Count, item);
-			}
-		}
+            if (index != listMods.Items.Count - 1)
+            {
+                var item = ViewModel.Modsdata[index];
+                ViewModel.Modsdata.Remove(item);
+                ViewModel.Modsdata.Insert(listMods.Items.Count, item);
+                listMods.SelectedIndex = listMods.Items.Count;
+                listMods.SelectedItem = item;
+                listMods.ScrollIntoView(item);
+            }
+        }
 
-		private void btnMoveDown_Click(object sender, RoutedEventArgs e)
-		{
-			if (listMods.SelectedItems.Count < 1)
-				return;
+        private void btnMoveDown_Click(object sender, RoutedEventArgs e)
+        {
+            if (listMods.SelectedItems.Count < 1)
+                return;
 
-			int index = listMods.SelectedIndex;
+            var list = new List<ModData>(listMods.SelectedItems.Cast<ModData>());
 
-			if (index < listMods.Items.Count)
-			{
-				var item = ViewModel.Modsdata[index];
-				ViewModel.Modsdata.Remove(item);
-				ViewModel.Modsdata.Insert(index + 1, item);
-			}
-		}
+            foreach (var mod in list)
+            {
+                int index = listMods.Items.IndexOf(mod);
 
-		private async void btnSelectAll_Click(object sender, RoutedEventArgs e)
-		{
-			foreach (ModData mod in listMods.Items)
-			{
-				mod.IsChecked = true;
-			}
+                if (index < listMods.Items.Count)
+                {
+                    var item = ViewModel.Modsdata[index];
+                    ViewModel.Modsdata.Remove(item);
+                    ViewModel.Modsdata.Insert(index + 1, item);
+                    listMods.SelectedIndex = index + 1;
+                    listMods.SelectedItem = item;
+                    listMods.ScrollIntoView(item);
+                }
+            }
+        }
 
-			RefreshModList();
-			btnSelectAll.IsEnabled = false;
-			await Task.Delay(150);
-			btnSelectAll.IsEnabled = true;
-		}
+        private async void btnSelectAll_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (ModData mod in listMods.Items)
+            {
+                mod.IsChecked = true;
+            }
 
-		private async void btnDeselectAll_Click(object sender, RoutedEventArgs e)
-		{
-			foreach (ModData mod in listMods.Items)
-			{
-				mod.IsChecked = false;
-			}
+            RefreshModList();
+            btnSelectAll.IsEnabled = false;
+            await Task.Delay(150);
+            btnSelectAll.IsEnabled = true;
+        }
 
-			RefreshModList();
-			btnDeselectAll.IsEnabled = false;
-			await Task.Delay(150);
-			btnDeselectAll.IsEnabled = true;
-		}
+        private async void btnDeselectAll_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (ModData mod in listMods.Items)
+            {
+                mod.IsChecked = false;
+            }
 
-		private async void RefreshBtn_Click(object sender, RoutedEventArgs e)
-		{
-			Refresh();
-			RefreshBtn.IsEnabled = false;
-			await Task.Delay(150);
-			RefreshBtn.IsEnabled = true;
-		}
+            RefreshModList();
+            btnDeselectAll.IsEnabled = false;
+            await Task.Delay(150);
+            btnDeselectAll.IsEnabled = true;
+        }
 
-		private void NewModBtn_Click(object sender, RoutedEventArgs e)
-		{
-			var form = new InstallModOptions();
-			var choice = form.Ask();
+        private async void RefreshBtn_Click(object sender, RoutedEventArgs e)
+        {
+            Refresh();
+            RefreshBtn.IsEnabled = false;
+            await Task.Delay(150);
+            RefreshBtn.IsEnabled = true;
+        }
 
-			switch (choice)
-			{
-				case (int)InstallModOptions.Type.ModArchive:
-					var archiveFile = new System.Windows.Forms.OpenFileDialog
-					{
-						Multiselect = true,
+        private void NewModBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var form = new InstallModOptions();
+            var choice = form.Ask();
 
-						Filter = "archive files|*.zip;*.7z;*.rar;*.tar"
-					};
-					System.Windows.Forms.DialogResult result_ = archiveFile.ShowDialog();
+            switch (choice)
+            {
+                case (int)InstallModOptions.Type.ModArchive:
+                    var archiveFile = new System.Windows.Forms.OpenFileDialog
+                    {
+                        Multiselect = true,
 
-					if (result_ == System.Windows.Forms.DialogResult.OK)
-					{
-						string[] sFileName = archiveFile.FileNames;
-						form.InstallMod(sFileName, App.CurrentGame.modDirectory);
+                        Filter = "archive files|*.zip;*.7z;*.rar;*.tar"
+                    };
+                    System.Windows.Forms.DialogResult result_ = archiveFile.ShowDialog();
 
-					}
-					break;
-				case (int)InstallModOptions.Type.ModFolder:
-					var newModFolder = new System.Windows.Forms.FolderBrowserDialog();
+                    if (result_ == System.Windows.Forms.DialogResult.OK)
+                    {
+                        string[] sFileName = archiveFile.FileNames;
+                        form.InstallMod(sFileName, App.CurrentGame.modDirectory);
 
-					System.Windows.Forms.DialogResult result = newModFolder.ShowDialog();
+                    }
+                    break;
+                case (int)InstallModOptions.Type.ModFolder:
+                    var newModFolder = new System.Windows.Forms.FolderBrowserDialog();
 
-					if (result == System.Windows.Forms.DialogResult.OK)
-					{
-						string[] FileName = { newModFolder.SelectedPath };
+                    System.Windows.Forms.DialogResult result = newModFolder.ShowDialog();
 
-						form.InstallMod(FileName, App.CurrentGame.modDirectory);
-					}
-					break;
-				case (int)InstallModOptions.Type.NewMod: //create mod
-					EditMod Edit = new(null);
-					Edit.ShowDialog();
-					Edit.Closed += EditMod_FormClosing;
+                    if (result == System.Windows.Forms.DialogResult.OK)
+                    {
+                        string[] FileName = { newModFolder.SelectedPath };
 
-					break;
-			}
+                        form.InstallMod(FileName, App.CurrentGame.modDirectory);
+                    }
+                    break;
+                case (int)InstallModOptions.Type.NewMod: //create mod
+                    EditMod Edit = new(null);
+                    Edit.ShowDialog();
+                    Edit.Closed += EditMod_FormClosing;
 
-		}
+                    break;
+            }
 
-		private void ConfigureModBtn_Click(object sender, RoutedEventArgs e)
-		{
-			InitModConfig();
-		}
+        }
 
-		private void ModContextConfigureMod_Click(object sender, RoutedEventArgs e)
-		{
-			if (ConfigureModBtn.IsEnabled)
-				InitModConfig();
-		}
+        private void ConfigureModBtn_Click(object sender, RoutedEventArgs e)
+        {
+            InitModConfig();
+        }
 
-		private void modChecked_Click(object sender, RoutedEventArgs e)
-		{
-			if (suppressEvent)
-				return;
+        private void ModContextConfigureMod_Click(object sender, RoutedEventArgs e)
+        {
+            if (ConfigureModBtn.IsEnabled)
+                InitModConfig();
+        }
 
-			codes = new List<Code>(mainCodes.Codes);
-			codesSearch = new();
-			string modDir = Path.Combine(App.CurrentGame.gameDirectory, "mods");
-			List<string> modlistCopy = new();
+        private void modChecked_Click(object sender, RoutedEventArgs e)
+        {
+            if (suppressEvent)
+                return;
 
-			//backup mod list here
-			foreach (ModData mod in listMods.Items)
-			{
-				if (mod?.IsChecked == true)
-				{
-					modlistCopy.Add(mod.Tag);
-				}
-			}
+            codes = new List<Code>(mainCodes.Codes);
+            codesSearch = new();
+            string modDir = Path.Combine(App.CurrentGame.gameDirectory, "mods");
+            List<string> modlistCopy = new();
 
-			if (sender is CheckBox check)
-			{
-				var curItem = check.DataContext as ModData;
-				var index = listMods.Items.IndexOf(curItem);
+            //backup mod list here
+            foreach (ModData mod in listMods.Items)
+            {
+                if (mod?.IsChecked == true)
+                {
+                    modlistCopy.Add(mod.Tag);
+                }
+            }
 
-				var curModCopy = listMods.Items[index] as ModData;
-				if (check.IsChecked == false)
-				{
-					modlistCopy.Remove((string)curModCopy.Tag);
-				}
-			}
+            if (sender is CheckBox check)
+            {
+                var curItem = check.DataContext as ModData;
+                var index = listMods.Items.IndexOf(curItem);
 
-			foreach (string mod in modlistCopy)
-			{
-				if (mods.TryGetValue(mod, out SADXModInfo value))
-				{
-					SADXModInfo inf = value;
-					if (!string.IsNullOrEmpty(inf.Codes))
-						codes.AddRange(CodeList.Load(Path.Combine(Path.Combine(modDir, mod), inf.Codes)).Codes);
-				}
-			}
+                var curModCopy = listMods.Items[index] as ModData;
+                if (check.IsChecked == false)
+                {
+                    modlistCopy.Remove((string)curModCopy.Tag);
+                }
+            }
+
+            foreach (string mod in modlistCopy)
+            {
+                if (mods.TryGetValue(mod, out SADXModInfo value))
+                {
+                    SADXModInfo inf = value;
+                    if (!string.IsNullOrEmpty(inf.Codes))
+                        codes.AddRange(CodeList.Load(Path.Combine(Path.Combine(modDir, mod), inf.Codes)).Codes);
+                }
+            }
 
 
-			loaderini.EnabledCodes = new List<string>(loaderini.EnabledCodes.Where(a => codes.Any(c => c.Name == a)));
+            EnabledCodes = new List<string>(EnabledCodes.Where(a => codes.Any(c => c.Name == a)));
 
-			foreach (Code item in codes.Where(a => a.Required && !loaderini.EnabledCodes.Contains(a.Name)))
-				loaderini.EnabledCodes.Add(item.Name);
+            foreach (Code item in codes.Where(a => a.Required && !EnabledCodes.Contains(a.Name)))
+                EnabledCodes.Add(item.Name);
 
-			CodeListView.BeginInit();
-			CodeListView.Items.Clear();
+            CodeListView.BeginInit();
+            CodeListView.Items.Clear();
 
-			foreach (Code item in codes)
-			{
-				CodeData extraItem = new()
-				{
-					codes = item,
-					IsChecked = loaderini.EnabledCodes.Contains(item.Name),
-				};
+            foreach (Code item in codes)
+            {
+                CodeData extraItem = new()
+                {
+                    codes = item,
+                    IsChecked = EnabledCodes.Contains(item.Name),
+                };
 
-				CodeListView.Items.Add(extraItem);
-				codesSearch.Add(extraItem);
-			}
+                CodeListView.Items.Add(extraItem);
+                codesSearch.Add(extraItem);
+            }
 
-			CodeListView.EndInit();
-		}
+            CodeListView.EndInit();
+        }
 
-		private void EditMod_FormClosing(object sender, EventArgs e)
-		{
-			Refresh();
-		}
+        private void EditMod_FormClosing(object sender, EventArgs e)
+        {
+            Refresh();
+        }
 
-		#region Form: Mods Tab: Context Menu
-		private void ModsView_Item_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-		{
-			if (!(GetModFromView(sender) is ModData mod))
-				return;
+        #region Form: Mods Tab: Context Menu
+        private void ModsView_Item_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (!(GetModFromView(sender) is ModData mod))
+                return;
 
-			OpenAboutModWindow(mod);
-		}
+            OpenAboutModWindow(mod);
+        }
 
-		private void ModList_MouseEnter(object sender, MouseEventArgs e)
-		{
-			if (!(GetModFromView(sender) is ModData mod))
-				return;
+        private void ModList_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (!(GetModFromView(sender) is ModData mod))
+                return;
 
-			textModsDescription.Text = Lang.GetString("CommonStrings.Description") + " " + mods[mod.Tag].Description;
-		}
+            textModsDescription.Text = Lang.GetString("CommonStrings.Description") + " " + mods[mod.Tag].Description;
+        }
 
-		private void ModList_MouseLeave(object sender, MouseEventArgs e)
-		{
-			var item = GetModFromView(sender);
-			textModsDescription.Text = (item is not null) ? $"{Lang.GetString("CommonStrings.Description")} {item.Description}" : Lang.GetString("Manager.Tabs.Mods.Text.NoModSelected");
-		}
+        private void ModList_MouseLeave(object sender, MouseEventArgs e)
+        {
+            var item = GetModFromView(sender);
+            textModsDescription.Text = (item is not null) ? $"{Lang.GetString("CommonStrings.Description")} {item.Description}" : Lang.GetString("Manager.Tabs.Mods.Text.NoModSelected");
+        }
 
-		private void modListView_SelectedIndexChanged(object sender, SelectionChangedEventArgs e)
-		{
-			int count = listMods.SelectedItems.Count;
+        private void modListView_SelectedIndexChanged(object sender, SelectionChangedEventArgs e)
+        {
+            int count = listMods.SelectedItems.Count;
 
-			if (count == 0)
-			{
-				btnMoveTop.IsEnabled = btnMoveUp.IsEnabled = btnMoveDown.IsEnabled = btnMoveBottom.IsEnabled = ConfigureModBtn.IsEnabled = false;
-			}
-			else if (count == 1)
-			{
-				var mod = GetModFromView(sender);
+            if (count == 0)
+            {
+                btnMoveTop.IsEnabled = btnMoveUp.IsEnabled = btnMoveDown.IsEnabled = btnMoveBottom.IsEnabled = ConfigureModBtn.IsEnabled = false;
+            }
+            else if (count == 1)
+            {
+                var mod = GetModFromView(sender);
 
-				btnMoveTop.IsEnabled = listMods.Items.IndexOf(mod) != 0;
-				btnMoveUp.IsEnabled = listMods.Items.IndexOf(mod) > 0;
-				btnMoveDown.IsEnabled = listMods.Items.IndexOf(mod) < listMods.Items.Count - 1;
-				btnMoveBottom.IsEnabled = listMods.Items.IndexOf(mod) != listMods.Items.Count - 1;
+                btnMoveTop.IsEnabled = listMods.Items.IndexOf(mod) != 0;
+                btnMoveUp.IsEnabled = listMods.Items.IndexOf(mod) > 0;
+                btnMoveDown.IsEnabled = listMods.Items.IndexOf(mod) < listMods.Items.Count - 1;
+                btnMoveBottom.IsEnabled = listMods.Items.IndexOf(mod) != listMods.Items.Count - 1;
 
-				ConfigureModBtn.IsEnabled = File.Exists(Path.Combine(App.CurrentGame.modDirectory, mod.Tag, "configschema.xml"));
-				ConfigureModBtn_UpdateState();
-			}
-			else if (count > 1)
-			{
-				btnMoveTop.IsEnabled = btnMoveUp.IsEnabled = btnMoveDown.IsEnabled = btnMoveBottom.IsEnabled = true;
-				ConfigureModBtn.IsEnabled = false;
-			}
-		}
-		
-		private void ModList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
-		{
-			bool isEnabled = ConfigureModBtn.IsEnabled;
+                ConfigureModBtn.IsEnabled = File.Exists(Path.Combine(App.CurrentGame.modDirectory, mod.Tag, "configschema.xml"));
+                ConfigureModBtn_UpdateState();
+            }
+            else if (count > 1)
+            {
+                btnMoveTop.IsEnabled = btnMoveUp.IsEnabled = btnMoveDown.IsEnabled = btnMoveBottom.IsEnabled = true;
+                ConfigureModBtn.IsEnabled = false;
+            }
+        }
 
-			if (ModContextMenu is not null)
-			{
-				var item = ModContextMenu.Items.OfType<MenuItem>().FirstOrDefault(item => item.Name == "ModContextConfigureMod");
+        private void ModList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            bool isEnabled = ConfigureModBtn.IsEnabled;
 
-				if (item is not null)
-				{
-					UIHelper.ToggleMenuItem(ref item, isEnabled);
-					Image iconConfig = FindName("menuIconConfig") as Image;
-					UIHelper.ToggleImage(ref menuIconConfig, isEnabled);
-				}
+            if (ModContextMenu is not null)
+            {
+                var item = ModContextMenu.Items.OfType<MenuItem>().FirstOrDefault(item => item.Name == "ModContextConfigureMod");
 
-				if (checkDevEnabled.IsChecked == true)
-				{
-					if (ModContextDev is null)
-					{
-						/*
+                if (item is not null)
+                {
+                    UIHelper.ToggleMenuItem(ref item, isEnabled);
+                    Image iconConfig = FindName("menuIconConfig") as Image;
+                    UIHelper.ToggleImage(ref menuIconConfig, isEnabled);
+                }
+
+                if (checkDevEnabled.IsChecked == true)
+                {
+                    if (ModContextDev is null)
+                    {
+                        /*
 						ModContextDev = new();
 						MenuItem manifest = new();
 						ModContextDev.Name = "menuDev";
@@ -444,1188 +463,1322 @@ namespace SAModManager
 						ModContextDev.Items.Add(manifest);
 						ModContextMenu.Items.Add(ModContextDev);
 						*/
-					}
-				}
-				else
-				{
-					if (ModContextDev is not null)
-					{
-						var modDev = ModContextMenu.Items.OfType<MenuItem>().FirstOrDefault(item => item.Name == "menuDev");
+                    }
+                }
+                else
+                {
+                    if (ModContextDev is not null)
+                    {
+                        var modDev = ModContextMenu.Items.OfType<MenuItem>().FirstOrDefault(item => item.Name == "menuDev");
 
-						if (modDev is not null)
-							ModContextMenu.Items.Remove(modDev);
-					}
+                        if (modDev is not null)
+                            ModContextMenu.Items.Remove(modDev);
+                    }
 
-				}
+                }
 
-			}
-		}
+            }
+        }
 
-		private void ModsContextDeveloperManifest_Click(object sender, RoutedEventArgs e)
-		{
-			if (!displayedManifestWarning)
-			{
-				var result = new MessageWindow(Lang.GetString("Warning"), Lang.GetString("MessageWindow.Warnings.GenerateManifest"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Warning, MessageWindow.Buttons.YesNo);
-				result.ShowDialog();
-				if (result.isYes != true)
-				{
-					return;
-				}
+        private void ModsContextDeveloperManifest_Click(object sender, RoutedEventArgs e)
+        {
+            if (!displayedManifestWarning)
+            {
+                var result = new MessageWindow(Lang.GetString("Warning"), Lang.GetString("MessageWindow.Warnings.GenerateManifest"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Warning, MessageWindow.Buttons.YesNo);
+                result.ShowDialog();
+                if (result.isYes != true)
+                {
+                    return;
+                }
 
-				displayedManifestWarning = true;
-			}
+                displayedManifestWarning = true;
+            }
 
-			foreach (ModData item in listMods.SelectedItems)
-			{
+            foreach (ModData item in listMods.SelectedItems.Cast<ModData>().ToList())
+            {
 
-				var modPath = Path.Combine(App.CurrentGame.modDirectory, (string)item.Tag);
-				var manifestPath = Path.Combine(modPath, "mod.manifest");
+                var modPath = Path.Combine(App.CurrentGame.modDirectory, (string)item.Tag);
+                var manifestPath = Path.Combine(modPath, "mod.manifest");
 
-				List<Updater.ModManifestEntry> manifest;
-				List<Updater.ModManifestDiff> diff;
+                List<Updater.ModManifestEntry> manifest;
+                List<Updater.ModManifestDiff> diff;
 
-				var progress = new Updater.ManifestDialog(modPath, $"Generating manifest: {(string)item.Tag}", true);
-				progress.ShowDialog();
+                var progress = new Updater.ManifestDialog(modPath, $"Generating manifest: {(string)item.Tag}", true);
+                progress.ShowDialog();
 
-				bool? ManifDialog = progress.DialogResult;
+                bool? ManifDialog = progress.DialogResult;
 
-				//progress.SetTask("Generating file index...");
-				if (ManifDialog != true)
-				{
-					continue;
-				}
+                //progress.SetTask("Generating file index...");
+                if (ManifDialog != true)
+                {
+                    continue;
+                }
 
-				diff = progress.Diff;
+                diff = progress.Diff;
 
-				if (diff == null)
-				{
-					continue;
-				}
+                if (diff == null)
+                {
+                    continue;
+                }
 
-				if (diff.Count(x => x.State != Updater.ModManifestState.Unchanged) <= 0)
-				{
-					continue;
-				}
+                if (diff.Count(x => x.State != Updater.ModManifestState.Unchanged) <= 0)
+                {
+                    continue;
+                }
 
-				var dialog = new ManifestChanges(diff);
-				dialog.ShowDialog();
-				bool? resultManifChange = dialog.DialogResult;
+                var dialog = new ManifestChanges(diff);
+                dialog.ShowDialog();
+                bool? resultManifChange = dialog.DialogResult;
 
-				if (resultManifChange != true)
-				{
-					continue;
-				}
+                if (resultManifChange != true)
+                {
+                    continue;
+                }
 
-				manifest = dialog.MakeNewManifest();
+                manifest = dialog.MakeNewManifest();
 
-				Updater.ModManifest.ToFile(manifest, manifestPath);
-			}
-		}
+                Updater.ModManifest.ToFile(manifest, manifestPath);
+            }
+        }
 
-		private void ModContextOpenFolder_Click(object sender, RoutedEventArgs e)
-		{
-			var selectedMods = listMods.SelectedItems.OfType<ModData>();
+        private void ModContextOpenFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedMods = listMods.SelectedItems.OfType<ModData>();
 
-			foreach (var mod in selectedMods.Where(mod => !string.IsNullOrEmpty(mod.Tag)))
-			{
-				string fullPath = Path.Combine(App.CurrentGame.modDirectory, mod.Tag);
-				if (Directory.Exists(fullPath))
-					Process.Start(new ProcessStartInfo { FileName = fullPath, UseShellExecute = true });
-			}
-		}
+            foreach (var mod in selectedMods.Where(mod => !string.IsNullOrEmpty(mod.Tag)))
+            {
+                string fullPath = Path.Combine(App.CurrentGame.modDirectory, mod.Tag);
+                if (Directory.Exists(fullPath))
+                    Process.Start(new ProcessStartInfo { FileName = fullPath, UseShellExecute = true });
+            }
+        }
 
-		private async void ModContextChkUpdate_Click(object sender, RoutedEventArgs e)
-		{
-			await UpdateSelectedMods();
-		}
+        private async void ModContextChkUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            await UpdateSelectedMods();
+        }
 
-		private async void ModContextVerifyIntegrity_Click(object sender, RoutedEventArgs e)
-		{
+        private async void ModContextVerifyIntegrity_Click(object sender, RoutedEventArgs e)
+        {
 
-			List<Tuple<string, ModInfo>> items = listMods.SelectedItems.Cast<ModData>()
-				.Select(x => (string)x.Tag)
-				.Where(x => File.Exists(Path.Combine(App.CurrentGame.modDirectory, x, "mod.manifest")))
-				.Select(x => new Tuple<string, ModInfo>(x, mods[x]))
-				.ToList();
+            List<Tuple<string, ModInfo>> items = listMods.SelectedItems.Cast<ModData>()
+                .Select(x => (string)x.Tag)
+                .Where(x => File.Exists(Path.Combine(App.CurrentGame.modDirectory, x, "mod.manifest")))
+                .Select(x => new Tuple<string, ModInfo>(x, mods[x]))
+                .ToList();
 
-			if (items.Count < 1)
-			{
-				new MessageWindow(Lang.GetString("MessageWindow.Errors.MissingManifest.Title"), Lang.GetString("MessageWindow.Errors.MissingManifest"),
-			MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Information).ShowDialog();
-				return;
-			}
+            if (items.Count < 1)
+            {
+                new MessageWindow(Lang.GetString("MessageWindow.Errors.MissingManifest.Title"), Lang.GetString("MessageWindow.Errors.MissingManifest"),
+            MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Information).ShowDialog();
+                return;
+            }
 
-			var progress = new Updater.VerifyModDialog(items, App.CurrentGame.modDirectory);
+            var progress = new Updater.VerifyModDialog(items, App.CurrentGame.modDirectory);
 
-			progress.ShowDialog();
+            progress.ShowDialog();
 
-			bool? res = progress.DialogResult;
+            bool? res = progress.DialogResult;
 
-			if (res == false)
-			{
-				return;
-			}
+            if (res == false)
+            {
+                return;
+            }
 
-			List<Tuple<string, ModInfo, List<Updater.ModManifestDiff>>> failed = progress.Failed;
+            modUpdater.modManifestTuple = progress.Failed;
 
-			if (failed.Count < 1)
-			{
-				new MessageWindow(Lang.GetString("MessageWindow.Information.ModPassedVerif.Title"), Lang.GetString("MessageWindow.Information.ModPassedVerif"),
-					MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Information).ShowDialog();
-			}
-			else
-			{
+            if (modUpdater.modManifestTuple is null)
+                return;
 
-				var error = Lang.GetString("MessageWindow.Errors.ModFailedVerif0")
-						+ string.Join("\n", failed.Select(x => $"{x.Item2.Name}: "
-						+ Util.GetFileCountString(x.Item3.Count(y => y.State != Updater.ModManifestState.Unchanged), "MessageWindow.Errors.ModFailedVerif1")))
-						+ Lang.GetString("MessageWindow.Errors.ModFailedVerif2");
+            if (modUpdater.modManifestTuple.Count < 1)
+            {
+                new MessageWindow(Lang.GetString("MessageWindow.Information.ModPassedVerif.Title"), Lang.GetString("MessageWindow.Information.ModPassedVerif"),
+                    MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Information).ShowDialog();
+            }
+            else
+            {
 
-
-				var result = new MessageWindow(Lang.GetString("MessageWindow.Errors.ModFailedVerif.Title"), error, MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Information, MessageWindow.Buttons.YesNo);
-				result.ShowDialog();
-
-				if (result.isYes != true)
-				{
-					return;
-				}
+                var error = Lang.GetString("MessageWindow.Errors.ModFailedVerif0")
+                        + string.Join("\n", modUpdater.modManifestTuple.Select(x => $"{x.Item2.Name}: "
+                        + Util.GetFileCountString(x.Item3.Count(y => y.State != Updater.ModManifestState.Unchanged), "MessageWindow.Errors.ModFailedVerif1")))
+                        + Lang.GetString("MessageWindow.Errors.ModFailedVerif2");
 
 
-				await ExecuteModsUpdateCheck();
-				await UpdateChecker_DoWorkForced();
-				modUpdater.ForceUpdate = true;
+                var result = new MessageWindow(Lang.GetString("MessageWindow.Errors.ModFailedVerif.Title"), error, MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Information, MessageWindow.Buttons.YesNo);
+                result.ShowDialog();
+
+                if (result.isYes != true)
+                {
+                    return;
+                }
+
+
+                await ExecuteModsUpdateCheck();
+                await UpdateChecker_DoWorkForced();
+                modUpdater.ForceUpdate = true;
                 UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
             }
 
-		}
-
-		private async void ForceModUpdate_Click(object sender, RoutedEventArgs e)
-		{
-			var result = new MessageWindow(Lang.GetString("MessageWindow.Warnings.ForceModUpdateTitle"), Lang.GetString("MessageWindow.Warnings.ForceModUpdate"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Caution, MessageWindow.Buttons.YesNo);
-			result.ShowDialog();
-
-			if (result.isYes)
-			{
-				modUpdater.ForceUpdate = true;
-				await UpdateSelectedMods();
-			}
-		}
-
-		private void ModContextEditMod_Click(object sender, RoutedEventArgs e)
-		{
-			var mod = (ModData)listMods.SelectedItem;
-
-			if (mod == null)
-				return;
-
-			SADXModInfo modInfo = mods[mod.Tag];
-			EditMod Edit = new(modInfo);
-			Edit.ShowDialog();
-			Edit.Closed += EditMod_FormClosing;
-		}
-
-		private void ModContextDeleteMod_Click(object sender, RoutedEventArgs e)
-		{
-			var selectedItems = listMods.SelectedItems;
-			var count = selectedItems.Count > 0;
-
-			if (count)
-			{
-				var confirmMessage = Lang.GetString("MessageWindow.Warnings.DeleteMod");
-				var deleteConfirmation = new MessageWindow(Lang.GetString("MessageWindow.DefaultTitle"), confirmMessage, MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Warning, MessageWindow.Buttons.YesNo);
-
-				deleteConfirmation.ShowDialog();
-				if (deleteConfirmation.isYes)
-				{
-					foreach (var selectedItem in selectedItems)
-					{
-						var item = (ModData)selectedItem;
-
-						string fullPath = Path.Combine(App.CurrentGame.modDirectory, item.Tag);
-
-						if (Directory.Exists(fullPath))
-						{
-							Directory.Delete(fullPath, true);
-						}
-					}
-
-					LoadModList();
-				}
-			}
-		}
-		#endregion
-
-		#region Form: Mods Tab: Shortcuts
-		private void ModsList_OnPreviewKeyDown(object sender, KeyEventArgs e)
-		{
-			if (listMods == null)
-				return;
-
-			ModData mod = (ModData)listMods.SelectedItem;
-
-			if (mod == null)
-				return;
-
-			var ctrlKey = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
-
-			if (Keyboard.IsKeyDown(Key.Space))
-			{
-				listMods.BeginInit();
-				mod.IsChecked = !mod.IsChecked;
-				listMods.EndInit();
-			}
-			else if (ctrlKey)
-			{
-
-				if (Keyboard.IsKeyDown(Key.E))
-					ModContextEditMod_Click(null, null);
-				else if (Keyboard.IsKeyDown(Key.O))
-					ModContextOpenFolder_Click(null, null);
-				else if (Keyboard.IsKeyDown(Key.C))
-					ModContextConfigureMod_Click(null, null);
-				else if (Keyboard.IsKeyDown(Key.U))
-					ModContextChkUpdate_Click(null, null);
-				else if (Keyboard.IsKeyDown(Key.Enter))
-					AboutBtn_Click(null, null);
-
-				e.Handled = true;
-			}
-			else if (Keyboard.IsKeyDown(Key.Enter))
-			{
-				OpenAboutModWindow(mod);
-				e.Handled = true;
-			}
-
-
-			if (Keyboard.IsKeyDown(Key.Delete))
-			{
-				ModContextDeleteMod_Click(null, null);
-				e.Handled = true;
-			}
-
-		}
-
-		private void CodesList_OnPreviewKeyDown(object sender, KeyEventArgs e)
-		{
-			var code = GetCodeFromView(sender);
-
-			if (code == null)
-				return;
-
-			if (Keyboard.IsKeyDown(Key.Space))
-			{
-				CodeListView.BeginInit();
-				code.IsChecked = !code.IsChecked;
-				CodeListView.EndInit();
-			}
-
-
-			if (Keyboard.IsKeyDown(Key.Enter))
-				OpenAboutCodeWindow(code.codes);
-		}
-
-		private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
-		{
-
-			var ctrlkey = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
-
-			if (Keyboard.IsKeyDown(Key.F5))
-			{
-				Refresh();
-			}
-			else if (ctrlkey)
-			{
-				if (Keyboard.IsKeyDown(Key.F)) //enable or disable search feature
-				{
-					if (tcMain.SelectedItem == tabMain)
-					{
-						if (ModsFind.Visibility == Visibility.Visible)
-						{
-							ModsFind.Visibility = Visibility.Collapsed;
-							FilterMods("");
-						}
-						else
-						{
-							ModsFind.Visibility = Visibility.Visible;
-							FilterMods(TextBox_ModsSearch.Text.ToLowerInvariant());
-							TextBox_ModsSearch.Focus();
-						}
-
-					}
-					else if (tcMain.SelectedItem == tbCodes)
-					{
-						if (CodesFind.Visibility == Visibility.Visible)
-						{
-							CodesFind.Visibility = Visibility.Collapsed;
-							FilterCodes("");
-						}
-						else
-						{
-
-							CodesFind.Visibility = Visibility.Visible;
-							FilterCodes(TextBox_CodesSearch.Text.ToLowerInvariant());
-							TextBox_CodesSearch.Focus();
-						}
-					}
-				}
-			}
-			if (Keyboard.IsKeyDown(Key.Escape))
-			{
-				if (tcMain.SelectedItem == tabMain)
-				{
-					ModsFind.Visibility = Visibility.Collapsed;
-					FilterMods("");
-				}
-				else if (tcMain.SelectedItem == tbCodes)
-				{
-					CodesFind.Visibility = Visibility.Collapsed;
-					FilterCodes("");
-				}
-			}
-
-		}
-		#endregion
-
-		#region Form: Mods Tab: Searchbar
-		//more info in the keyboard shortcut functions above.
-		private void TextBox_ModsSearch_LostFocus(object sender, RoutedEventArgs e)
-		{
-			// Close if focus is lost with no text
-			if (TextBox_ModsSearch.Text.Length == 0)
-				ModsFind.Visibility = Visibility.Collapsed;
-		}
-
-		private void TextBox_ModsSearch_TextChanged(object sender, TextChangedEventArgs e)
-		{
-			FilterMods(TextBox_ModsSearch.Text.ToLowerInvariant());
-		}
-		#endregion
-		#endregion
-		
-		#region Form: Codes Tab Functions
-		private void CodesView_Item_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-		{
-			var code = GetCodeFromView(sender);
-
-			if (code == null)
-				return;
-
-			OpenAboutCodeWindow(code.codes);
-		}
-
-		private void CodesView_Item_MouseEnter(object sender, MouseEventArgs e)
-		{
-			var codes = GetCodeFromView(sender);
-
-			if (codes == null)
-				return;
-
-			var code = codes.codes;
-
-			CodeAuthorGrid.Text += " " + code.Author;
-			CodeDescGrid.Text += " " + code.Description;
-			CodeCategoryGrid.Text += " " + code.Category;
-		}
-
-		private void CodesView_Item_MouseLeave(object sender, MouseEventArgs e)
-		{
-			CodeAuthorGrid.Text = Lang.GetString("CommonStrings.Author");
-			CodeDescGrid.Text = Lang.GetString("CommonStrings.Description");
-			CodeCategoryGrid.Text = Lang.GetString("CommonStrings.Category");
-		}
-
-		private void btnSelectAllCode_Click(object sender, RoutedEventArgs e)
-		{
-			CodeListView.BeginInit();
-			foreach (CodeData code in CodeListView.Items)
-			{
-				code.IsChecked = true;
-			}
-			CodeListView.EndInit();
-		}
-
-		private void btnDeselectAllCode_Click(object sender, RoutedEventArgs e)
-		{
-			CodeListView.BeginInit();
-			foreach (CodeData code in CodeListView.Items)
-			{
-				code.IsChecked = false;
-			}
-			CodeListView.EndInit();
-		}
-
-		private void btnAddCode_Click(object sender, RoutedEventArgs e)
-		{
-			Common.NewCode newcodewindow = new Common.NewCode();
-			newcodewindow.ShowDialog();
-		}
-
-		private void TextBox_CodesSearch_TextChanged(object sender, TextChangedEventArgs e)
-		{
-			FilterCodes(TextBox_CodesSearch.Text.ToLowerInvariant());
-		}
-
-		private void TextBox_CodesSearch_LostFocus(object sender, RoutedEventArgs e)
-		{
-			if (TextBox_CodesSearch.Text.Length == 0)
-				CodesFind.Visibility = Visibility.Collapsed;
-		}
-		#endregion
-
-		#region Form: Manager Tab: Functions
-		private async void btnOneClick_Click(object sender, RoutedEventArgs e)
-		{
-			try
-			{
-				string execPath = Environment.ProcessPath;
-
-				await Process.Start(new ProcessStartInfo(execPath, "urlhandler")
-				{
-					UseShellExecute = true,
-					Verb = "runas"
-				}).WaitForExitAsync();
-
-				Image iconConfig = FindName("GB") as Image;
-				UIHelper.ToggleImage(ref iconConfig, false);
-				UIHelper.ToggleButton(ref btnOneClick, false);
-
-			}
-			catch { }
-		}
-
-		//To do, rework this mess to handle multiple games and clean everything.
-		private async void btnBrowseGameDir_Click(object sender, RoutedEventArgs e)
-		{
-			// TODO: Rework to handle any game directory being input.
-			var dialog = new System.Windows.Forms.FolderBrowserDialog();
-
-			System.Windows.Forms.DialogResult result = dialog.ShowDialog();
-
-			if (result == System.Windows.Forms.DialogResult.OK)
-			{
-				string GamePath = dialog.SelectedPath;
-				string path = Path.Combine(GamePath, App.CurrentGame.exeName);
-
-				if (File.Exists(path)) //game Path valid 
-				{
-					textGameDir.Text = GamePath;
-					(GameProfile as IniSettings.SADX.GameSettings).GamePath = GamePath;
-					SetGamePath();
-					UpdateManagerInfo();
-
-					if (File.Exists(loaderinipath))
-						loaderini = IniSerializer.Deserialize<SADXLoaderInfo>(loaderinipath);
-
-					await SetLoaderFile();
-					await InstallLoader(true);
-					await GamesInstall.CheckAndInstallDependencies(App.CurrentGame);
-					await UpdateGameConfig(SetGame.SADX);
-					Save();
-				}
-				else
-				{
-					new MessageWindow(Lang.GetString("MessageWindow.Errors.GamePathFailed.Title"), Lang.GetString("MessageWindow.Errors.GamePathFailed"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Error, MessageWindow.Buttons.OK).ShowDialog();
-				}
-
-				Update_PlayButtonsState();
-			}
-		}
-
-		private async void btnCheckUpdates_Click(object sender, RoutedEventArgs e)
-		{
-			UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
-
-			if (await App.PerformUpdateManagerCheck() || await App.PerformUpdateLoaderCodesCheck())
-			{
-				return;
-			}
-
-			manualModUpdate = true;
-			await CheckForModUpdates(true);
-			Refresh();
-		}
-
-		private void AboutBtn_Click(object sender, RoutedEventArgs e)
-		{
-			new AboutManager().ShowDialog();
-		}
-
-		private async void btnInstallLoader_Click(object sender, RoutedEventArgs e)
-		{
-			// TODO: Check the todos within this function
-			if (string.IsNullOrEmpty(App.CurrentGame.gameDirectory) || !File.Exists(Path.Combine(App.CurrentGame.gameDirectory, App.CurrentGame.exeName)))
-			{
-				new MessageWindow(Lang.GetString("MessageWindow.Errors.GamePathNotFound.Title"), Lang.GetString("MessageWindow.Errors.GamePathNotFound"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Error, MessageWindow.Buttons.OK).ShowDialog();
-				return;
-			}
-
-			await InstallLoader(); //ToDo update to be less a mess
-			btnBrowseGameDir.IsEnabled = false;
-
-			if (App.CurrentGame.loader.installed)
-			{
-				await GamesInstall.InstallLoader(App.CurrentGame);
-				await GamesInstall.CheckAndInstallDependencies(App.CurrentGame);
-				await UpdateGameConfig(SetGame.SADX); //To do change with "current selected game" when it's available
-			}
-
-
-			UpdateButtonsState();
+        }
+
+        private async void ForceModUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            var result = new MessageWindow(Lang.GetString("MessageWindow.Warnings.ForceModUpdateTitle"), Lang.GetString("MessageWindow.Warnings.ForceModUpdate"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Caution, MessageWindow.Buttons.YesNo);
+            result.ShowDialog();
+
+            if (result.isYes)
+            {
+                modUpdater.ForceUpdate = true;
+                await UpdateSelectedMods();
+            }
+        }
+
+        private void ModContextEditMod_Click(object sender, RoutedEventArgs e)
+        {
+            var mod = (ModData)listMods.SelectedItem;
+
+            if (mod == null)
+                return;
+
+            SADXModInfo modInfo = mods[mod.Tag];
+            EditMod Edit = new(modInfo);
+            Edit.ShowDialog();
+            Edit.Closed += EditMod_FormClosing;
+        }
+
+        private void ModContextDeleteMod_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedItems = listMods.SelectedItems;
+            var count = selectedItems.Count > 0;
+
+            if (count)
+            {
+                var confirmMessage = Lang.GetString("MessageWindow.Warnings.DeleteMod");
+                var deleteConfirmation = new MessageWindow(Lang.GetString("MessageWindow.DefaultTitle"), confirmMessage, MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Warning, MessageWindow.Buttons.YesNo);
+
+                deleteConfirmation.ShowDialog();
+                if (deleteConfirmation.isYes)
+                {
+                    foreach (var selectedItem in selectedItems)
+                    {
+                        var item = (ModData)selectedItem;
+
+                        string fullPath = Path.Combine(App.CurrentGame.modDirectory, item.Tag);
+
+                        if (Directory.Exists(fullPath))
+                        {
+                            Directory.Delete(fullPath, true);
+                        }
+                    }
+
+                    LoadModList();
+                }
+            }
+        }
+        #endregion
+
+        #region Form: Mods Tab: Shortcuts
+
+        private void SelectModByFirstLetter(string letter)
+        {
+            if (listMods.Items.Count == 0)
+                return;
+
+            int index = listMods.SelectedIndex + 1;
+
+            if (index < 0)
+                index = 0;
+
+            for (int i = index; i < listMods.Items.Count; i++)
+            {
+                var item = (ModData)listMods.Items[i];
+
+                if (!string.IsNullOrEmpty(item.Name) && letter[0] == item.Name[0])
+                {
+                    listMods.SelectedIndex = i;
+                    listMods.SelectedItem = item;
+                    listMods.ScrollIntoView(item);
+                    return;
+                }
+            }
+
+            for (int i = 0; i < listMods.Items.Count; i++)
+            {
+                var item = (ModData)listMods.Items[i];
+
+                if (!string.IsNullOrEmpty(item.Name) && letter[0] == item.Name[0])
+                {
+                    listMods.SelectedIndex = i;
+                    listMods.SelectedItem = item;
+                    listMods.ScrollIntoView(item);
+                    return;
+                }
+            }
+        }
+
+        private void ModsList_OnPreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (listMods == null)
+                return;
+
+            ModData mod = (ModData)listMods.SelectedItem;
+
+            if (mod == null)
+                return;
+
+            var ctrlKey = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
+
+            if (Keyboard.IsKeyDown(Key.Space))
+            {
+                listMods.BeginInit();
+                mod.IsChecked = !mod.IsChecked;
+                listMods.EndInit();
+            }
+            else if (ctrlKey)
+            {
+
+                if (Keyboard.IsKeyDown(Key.E))
+                    ModContextEditMod_Click(null, null);
+                else if (Keyboard.IsKeyDown(Key.O))
+                    ModContextOpenFolder_Click(null, null);
+                else if (Keyboard.IsKeyDown(Key.C))
+                    ModContextConfigureMod_Click(null, null);
+                else if (Keyboard.IsKeyDown(Key.U))
+                    ModContextChkUpdate_Click(null, null);
+                else if (Keyboard.IsKeyDown(Key.Enter))
+                    AboutBtn_Click(null, null);
+
+                e.Handled = true;
+            }
+            else if (Keyboard.IsKeyDown(Key.Enter))
+            {
+                OpenAboutModWindow(mod);
+                e.Handled = true;
+            }
+
+
+            if (Keyboard.IsKeyDown(Key.Delete))
+            {
+                ModContextDeleteMod_Click(null, null);
+                e.Handled = true;
+            }
+
+            if (e.Key >= Key.A && e.Key <= Key.Z)
+            {
+                KeyConverter converter = new();
+                string keyString = (string)converter.ConvertTo(e.Key, typeof(string));
+                SelectModByFirstLetter(keyString);
+            }
+
+        }
+
+        private void CodesList_OnPreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            var code = GetCodeFromView(sender);
+
+            if (code == null)
+                return;
+
+            if (Keyboard.IsKeyDown(Key.Space))
+            {
+                CodeListView.BeginInit();
+                code.IsChecked = !code.IsChecked;
+                CodeListView.EndInit();
+            }
+
+
+            if (Keyboard.IsKeyDown(Key.Enter))
+                OpenAboutCodeWindow(code.codes);
+        }
+
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+
+            var ctrlkey = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
+
+            if (Keyboard.IsKeyDown(Key.F5))
+            {
+                Refresh();
+            }
+            else if (ctrlkey)
+            {
+                if (Keyboard.IsKeyDown(Key.F)) //enable or disable search feature
+                {
+                    if (tcMain.SelectedItem == tabMain)
+                    {
+                        if (ModsFind.Visibility == Visibility.Visible)
+                        {
+                            ModsFind.Visibility = Visibility.Collapsed;
+                            FilterMods("");
+                        }
+                        else
+                        {
+                            ModsFind.Visibility = Visibility.Visible;
+                            FilterMods(TextBox_ModsSearch.Text.ToLowerInvariant());
+                            TextBox_ModsSearch.Focus();
+                        }
+
+                    }
+                    else if (tcMain.SelectedItem == tbCodes)
+                    {
+                        if (CodesFind.Visibility == Visibility.Visible)
+                        {
+                            CodesFind.Visibility = Visibility.Collapsed;
+                            FilterCodes("");
+                        }
+                        else
+                        {
+
+                            CodesFind.Visibility = Visibility.Visible;
+                            FilterCodes(TextBox_CodesSearch.Text.ToLowerInvariant());
+                            TextBox_CodesSearch.Focus();
+                        }
+                    }
+                }
+            }
+            if (Keyboard.IsKeyDown(Key.Escape))
+            {
+                if (tcMain.SelectedItem == tabMain)
+                {
+                    ModsFind.Visibility = Visibility.Collapsed;
+                    FilterMods("");
+                }
+                else if (tcMain.SelectedItem == tbCodes)
+                {
+                    CodesFind.Visibility = Visibility.Collapsed;
+                    FilterCodes("");
+                }
+            }
+
+        }
+        #endregion
+
+        #region Form: Mods Tab: Searchbar
+        //more info in the keyboard shortcut functions above.
+        private void TextBox_ModsSearch_LostFocus(object sender, RoutedEventArgs e)
+        {
+            // Close if focus is lost with no text
+            if (TextBox_ModsSearch.Text.Length == 0)
+                ModsFind.Visibility = Visibility.Collapsed;
+        }
+
+        private void TextBox_ModsSearch_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            FilterMods(TextBox_ModsSearch.Text.ToLowerInvariant());
+        }
+        #endregion
+        #endregion
+
+        #region Form: Codes Tab Functions
+        private void CodesView_Item_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            var code = GetCodeFromView(sender);
+
+            if (code == null)
+                return;
+
+            OpenAboutCodeWindow(code.codes);
+        }
+
+        private void CodesView_Item_MouseEnter(object sender, MouseEventArgs e)
+        {
+            var codes = GetCodeFromView(sender);
+
+            if (codes == null)
+                return;
+
+            var code = codes.codes;
+
+            CodeAuthorGrid.Text += " " + code.Author;
+            CodeDescGrid.Text += " " + code.Description;
+            CodeCategoryGrid.Text += " " + code.Category;
+        }
+
+        private void CodesView_Item_MouseLeave(object sender, MouseEventArgs e)
+        {
+            CodeAuthorGrid.Text = Lang.GetString("CommonStrings.Author");
+            CodeDescGrid.Text = Lang.GetString("CommonStrings.Description");
+            CodeCategoryGrid.Text = Lang.GetString("CommonStrings.Category");
+        }
+
+        private void btnSelectAllCode_Click(object sender, RoutedEventArgs e)
+        {
+            CodeListView.BeginInit();
+            foreach (CodeData code in CodeListView.Items)
+            {
+                code.IsChecked = true;
+            }
+            CodeListView.EndInit();
+        }
+
+        private void btnDeselectAllCode_Click(object sender, RoutedEventArgs e)
+        {
+            CodeListView.BeginInit();
+            foreach (CodeData code in CodeListView.Items)
+            {
+                code.IsChecked = false;
+            }
+            CodeListView.EndInit();
+        }
+
+        private void TextBox_CodesSearch_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            FilterCodes(TextBox_CodesSearch.Text.ToLowerInvariant());
+        }
+
+        private void TextBox_CodesSearch_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (TextBox_CodesSearch.Text.Length == 0)
+                CodesFind.Visibility = Visibility.Collapsed;
+        }
+        #endregion
+
+        #region Form: Manager Tab: Functions
+
+        private async Task EnableOneClickInstall()
+        {
+            try
+            {
+                string execPath = Environment.ProcessPath;
+
+                await Process.Start(new ProcessStartInfo(execPath, "urlhandler")
+                {
+                    UseShellExecute = true,
+                    Verb = "runas"
+                }).WaitForExitAsync();
+
+                Image iconConfig = FindName("GB") as Image;
+                UIHelper.ToggleImage(ref iconConfig, false);
+
+            }
+            catch { }
+
+            await Task.Delay(10);
+        }
+
+        //To do, rework this mess to handle multiple games and clean everything.
+        private async void btnBrowseGameDir_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new System.Windows.Forms.FolderBrowserDialog();
+
+            System.Windows.Forms.DialogResult result = dialog.ShowDialog();
+
+            if (result == System.Windows.Forms.DialogResult.OK)
+            {
+                bool pathValid = false;
+
+                foreach (var game in GamesInstall.GetSupportedGames())
+                {
+                    string GamePath = dialog.SelectedPath;
+                    string path = Path.Combine(GamePath, game.exeName);
+
+                    if (File.Exists(path)) //game Path valid 
+                    {
+						if (game == GamesInstall.SonicAdventure)
+							setGame = SetGame.SADX;
+						if (game == GamesInstall.SonicAdventure2)
+							setGame = SetGame.SA2;
+
+                        pathValid = true;
+                        tempPath = GamePath;
+						UIHelper.ToggleButton(ref btnOpenGameDir, true);
+                        await VanillaTransition.ConvertOldProfile(false, GamePath);
+						Load(true);
+						break;
+                    }
+                }
+
+                if (!pathValid)
+                {
+                    new MessageWindow(Lang.GetString("MessageWindow.Errors.GamePathFailed.Title"), Lang.GetString("MessageWindow.Errors.GamePathFailed"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Error, MessageWindow.Buttons.OK).ShowDialog();
+                }
+                else
+                {
+                    await InstallLoader();
+                    Save();
+                }
+            }
+        }
+
+        private async void btnCheckUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
+            checkForUpdate = true;
+            if (await App.PerformUpdateManagerCheck() || await App.PerformUpdateLoaderCodesCheck())
+            {
+                return;
+            }
+
+            manualModUpdate = true;
+            await CheckForModUpdates(true);
+            checkForUpdate = false;
+            Refresh();
+        }
+
+        private void AboutBtn_Click(object sender, RoutedEventArgs e)
+        {
+            new AboutManager().ShowDialog();
+        }
+
+        private async void btnInstallLoader_Click(object sender, RoutedEventArgs e)
+        {
+            // TODO: Check the todos within this function
+            if (string.IsNullOrEmpty(App.CurrentGame.gameDirectory) || !File.Exists(Path.Combine(App.CurrentGame.gameDirectory, App.CurrentGame.exeName)))
+            {
+                new MessageWindow(Lang.GetString("MessageWindow.Errors.GamePathNotFound.Title"), Lang.GetString("MessageWindow.Errors.GamePathNotFound"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Error, MessageWindow.Buttons.OK).ShowDialog();
+                return;
+            }
+
+            btnBrowseGameDir.IsEnabled = false;
+            await InstallLoader();
+            UpdateButtonsState();
             btnBrowseGameDir.IsEnabled = true;
-			Save();
-		}
+            Save();
+        }
 
-		// TODO: Both of these now point to the Manager's Repo, but we could make options to open/report Loader related issues.
-		// Something to discuss.
-		private void btnSource_Click(object sender, RoutedEventArgs e)
+        // TODO: Both of these now point to the Manager's Repo, but we could make options to open/report Loader related issues.
+        // Something to discuss.
+        private void btnSource_Click(object sender, RoutedEventArgs e)
+        {
+            var ps = new ProcessStartInfo("https://github.com/X-Hax/sa-mod-manager")
+            {
+                UseShellExecute = true,
+                Verb = "open"
+            };
+            Process.Start(ps);
+        }
+
+        private void btnReport_Click(object sender, RoutedEventArgs e)
+        {
+            var ps = new ProcessStartInfo("https://github.com/X-Hax/sa-mod-manager/issues/new")
+            {
+                UseShellExecute = true,
+                Verb = "open"
+            };
+
+            Process.Start(ps);
+        }
+
+        private void comboThemes_Loaded(object sender, RoutedEventArgs e)
+        {
+            comboThemes.GetBindingExpression(ComboBox.ItemsSourceProperty).UpdateTarget();
+            comboThemes.GetBindingExpression(ComboBox.SelectedItemProperty).UpdateTarget();
+        }
+
+        private void comboThemes_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            App.SwitchTheme();
+        }
+
+        private void comboLanguage_Loaded(object sender, RoutedEventArgs e)
+        {
+            comboLanguage.GetBindingExpression(ComboBox.ItemsSourceProperty).UpdateTarget();
+            comboLanguage.GetBindingExpression(ComboBox.SelectedItemProperty).UpdateTarget();
+        }
+
+        private void comboLanguage_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            App.SwitchLanguage();
+            UpdateBtnInstallLoader_State();
+            FlowDirectionHelper.UpdateFlowDirection();
+        }
+
+        private void btnProfileSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (!App.CurrentGame.loader.installed)
+                return;
+
+			int index = comboProfile.SelectedIndex;
+			ProfileDialog dialog = new ProfileDialog(ref GameProfiles, index);
+			dialog.ShowDialog();
+
+            // Save the Profiles file.
+            GameProfiles.Serialize(Path.Combine(App.CurrentGame.ProfilesDirectory, "Profiles.json"));
+			comboProfile.ItemsSource = GameProfiles.ProfilesList;
+			comboProfile.SelectedIndex = dialog.SelectedIndex;
+			comboProfile.Items.Refresh();
+        }
+
+        private void ModProfile_FormClosing(object sender, EventArgs e)
+        {
+            Refresh();
+        }
+
+        private void comboProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var selectedItem = comboProfile.SelectedItem;
+
+            if (selectedItem != null)
+            {
+				GameProfiles.ProfileIndex = comboProfile.SelectedIndex;
+				LoadGameSettings();
+                Refresh();
+            }
+        }
+        #endregion
+        #endregion
+
+        #region Private Functions
+        private void StartGame()
+        {
+            if (string.IsNullOrEmpty(App.CurrentGame.gameDirectory))
+            {
+                new MessageWindow(Lang.GetString("MessageWindow.Errors.GamePathNotFound.Title"), Lang.GetString("MessageWindow.Errors.GamePathNotFound"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Error, MessageWindow.Buttons.OK).ShowDialog();
+                return;
+            }
+
+            string executablePath = EnabledMods.Select(item => mods[item].EXEFile).FirstOrDefault(item => !string.IsNullOrEmpty(item)) ?? Path.Combine(App.CurrentGame.gameDirectory, App.CurrentGame.exeName);
+
+            string folderPath = Path.GetDirectoryName(executablePath);
+            Process.Start(new ProcessStartInfo(executablePath)
+            {
+                WorkingDirectory = folderPath
+            });
+
+            if ((bool)!checkManagerOpen.IsChecked)
+                Close();
+        }
+
+        public void SetModManagerVersion()
+        {
+            if (string.IsNullOrEmpty(App.RepoCommit)) //dev
+                Title = titleName + " " + "(Dev Build - " + Version + ")";
+            else
+                Title = titleName + " " + "(" + Version + " - " + App.RepoCommit[..7] + ")";
+        }
+
+		private void EnableUI(bool enable)
 		{
-			var ps = new ProcessStartInfo("https://github.com/X-Hax/sa-mod-manager")
+			if (enable)
 			{
-				UseShellExecute = true,
-				Verb = "open"
-			};
-			Process.Start(ps);
-		}
-
-		private void btnReport_Click(object sender, RoutedEventArgs e)
-		{
-			var ps = new ProcessStartInfo("https://github.com/X-Hax/sa-mod-manager/issues/new")
-			{
-				UseShellExecute = true,
-				Verb = "open"
-			};
-
-			Process.Start(ps);
-		}
-
-		private void comboThemes_Loaded(object sender, RoutedEventArgs e)
-		{
-			comboThemes.GetBindingExpression(ComboBox.ItemsSourceProperty).UpdateTarget();
-			comboThemes.GetBindingExpression(ComboBox.SelectedItemProperty).UpdateTarget();
-		}
-
-		private void comboThemes_SelectionChanged(object sender, SelectionChangedEventArgs e)
-		{
-			App.SwitchTheme();
-		}
-
-		private void comboLanguage_Loaded(object sender, RoutedEventArgs e)
-		{
-			comboLanguage.GetBindingExpression(ComboBox.ItemsSourceProperty).UpdateTarget();
-			comboLanguage.GetBindingExpression(ComboBox.SelectedItemProperty).UpdateTarget();
-		}
-
-		private void comboLanguage_SelectionChanged(object sender, SelectionChangedEventArgs e)
-		{
-			App.SwitchLanguage();
-			UpdateBtnInstallLoader_State();
-			FlowDirectionHelper.UpdateFlowDirection();
-		}
-
-		private void btnProfileSettings_Click(object sender, RoutedEventArgs e)
-		{
-			if (!App.CurrentGame.loader.installed)
-				return;
-
-			new ModProfile(ref comboProfile).ShowDialog();
-		}
-
-		private void ModProfile_FormClosing(object sender, EventArgs e)
-		{
-			Refresh();
-		}
-
-		private void comboProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
-		{
-			var selectedItem = comboProfile.SelectedItem as Profile;
-
-			if (selectedItem != null)
-			{
-				loaderini = IniSerializer.Deserialize<SADXLoaderInfo>(selectedItem.iniPath);
-				LoadSettings();
-				Refresh();
+				tabGame.Visibility = Visibility.Visible;
+				comboProfile.IsEnabled = true;
+				grpManAdvanced.IsEnabled = true;
+				grpManUpdates.IsEnabled = true;
+				btnInstallLoader.IsEnabled = true;
+				RefreshBtn.IsEnabled = true;
+				btnSelectAll.IsEnabled = true;
+				btnDeselectAll.IsEnabled = true;
+				SaveButton.IsEnabled = true;
+				SaveAndPlayButton.IsEnabled = true;
+				btnSelectAllCode.IsEnabled = true;
+				btnDeselectAllCode.IsEnabled = true;
+				btnProfileSettings.IsEnabled = true;
 			}
-		}
-		#endregion
-		#endregion
-
-		#region Private Functions
-		private void StartGame()
-		{
-			if (string.IsNullOrEmpty(App.CurrentGame.gameDirectory))
-			{
-				new MessageWindow(Lang.GetString("MessageWindow.Errors.GamePathNotFound.Title"), Lang.GetString("MessageWindow.Errors.GamePathNotFound"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Error, MessageWindow.Buttons.OK).ShowDialog();
-				return;
-			}
-
-			string executablePath = loaderini.Mods.Select(item => mods[item].EXEFile).FirstOrDefault(item => !string.IsNullOrEmpty(item)) ?? Path.Combine(App.CurrentGame.gameDirectory, App.CurrentGame.exeName);
-
-			string folderPath = Path.GetDirectoryName(executablePath);
-			Process.Start(new ProcessStartInfo(executablePath)
-			{
-				WorkingDirectory = folderPath
-			});
-
-			if ((bool)!checkManagerOpen.IsChecked)
-				Close();
-		}
-
-		public void SetModManagerVersion()
-		{
-			if (string.IsNullOrEmpty(App.RepoCommit)) //dev
-				Title = titleName + " " + "(Dev Build - " + Version + ")";
 			else
-				Title = titleName + " " + "(" + Version + " - " + App.RepoCommit[..7] + ")";
+			{
+				tabGame.Visibility = Visibility.Collapsed;
+				comboProfile.IsEnabled = false;
+				grpManAdvanced.IsEnabled = false;
+				grpManUpdates.IsEnabled = false;
+				btnInstallLoader.IsEnabled = false;
+				RefreshBtn.IsEnabled = false;
+				btnSelectAll.IsEnabled = false;
+				btnDeselectAll.IsEnabled = false;
+				SaveButton.IsEnabled = false;
+				SaveAndPlayButton.IsEnabled = false;
+				btnSelectAllCode.IsEnabled = false;
+				btnDeselectAllCode.IsEnabled = false;
+				btnProfileSettings.IsEnabled = false;
+			}
 		}
 
-		private void SetGameUI()
-		{
-			Grid stackPanel;
+        private void SetGameUI()
+        {
+            Grid stackPanel;
+			stackPanel = (Grid)tabGame.Content;
+			stackPanel.Children.Clear();
 			Grid tsPanel;
+			tsPanel = (Grid)tabTestSpawn.Content;
+			tsPanel.Children.Clear();
 			switch (setGame)
-			{
-				case SetGame.SADX:
-					tabGame.Visibility = Visibility.Visible;
-                    gameDebugSettings = (GameProfile as IniSettings.SADX.GameSettings).DebugSettings;
-					stackPanel = (Grid)tabGame.Content;
-					stackPanel.Children.Add(new Elements.SADX.GameConfig(ref GameProfile, ref gameConfigFile));
-                    tsPanel = (Grid)tabTestSpawn.Content;
-					tsPanel.Children.Add(new Elements.SADX.TestSpawn(GameProfile, mods));
-					break;
-				case SetGame.SA2:
-				default:
-					tabGame.Visibility = Visibility.Collapsed;
-					break;
-			}
-		}
+            {
+                case SetGame.SADX:
+					EnableUI(true);
+                    stackPanel.Children.Add(new Elements.SADX.GameConfig(ref GameProfile, ref gameConfigFile));
+                    tsPanel.Children.Add(new Elements.SADX.TestSpawn(ref GameProfile, mods, EnabledMods));
+                    break;
+                case SetGame.SA2:
+				case SetGame.None:
+                default:
+					EnableUI(false);
+                    break;
+            }
+        }
 
-		private void UI_ToggleGameConfig(bool value)
-		{
-			tabGame.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
-		}
-
-		private void UpdateManagerInfo()
-		{
+        //update all the games information such as loader and mods path
+        private async Task UpdateManagerInfo()
+        {
             if (!string.IsNullOrEmpty(App.CurrentGame.gameDirectory) && File.Exists(Path.Combine(App.CurrentGame.gameDirectory, App.CurrentGame.exeName)))
-			{
+            {
 
-				App.CurrentGame.modDirectory = Path.Combine(App.CurrentGame.gameDirectory, "mods");
+                App.CurrentGame.modDirectory = Path.Combine(App.CurrentGame.gameDirectory, "mods");
 
-				loaderinipath = Path.Combine(App.CurrentGame.gameDirectory, "mods/SADXModLoader.ini");
-                App.CurrentGame.loader.dataDllOriginPath = Path.Combine(App.CurrentGame.gameDirectory, "system/CHRMODELS_orig.dll");
-                App.CurrentGame.loader.loaderdllpath = Path.Combine(App.CurrentGame.gameDirectory, "mods/SADXModLoader.dll");
-                App.CurrentGame.loader.dataDllPath = Path.Combine(App.CurrentGame.gameDirectory, "system/CHRMODELS.dll");
-				updatePath = Path.Combine(App.CurrentGame.gameDirectory, "mods/.updates");
+                App.CurrentGame.loader.loaderinipath = Path.Combine(App.CurrentGame.gameDirectory, Path.Combine("mods", App.CurrentGame.defaultIniProfile));
+                App.CurrentGame.loader.dataDllOriginPath = Path.Combine(App.CurrentGame.gameDirectory, App.CurrentGame.loader.originPath.defaultDataDllOriginPath);
+                App.CurrentGame.loader.loaderdllpath = Path.Combine(App.CurrentGame.gameDirectory, Path.Combine(App.CurrentGame.modDirectory, App.CurrentGame.loader.name + ".dll"));
+                App.CurrentGame.loader.dataDllPath = Path.Combine(App.CurrentGame.gameDirectory, App.CurrentGame.loader.originPath.defaultDataDllPath);
 
-				codelstpath = Path.Combine(App.CurrentGame.gameDirectory, "mods/Codes.lst");
-				codexmlpath = Path.Combine(App.CurrentGame.gameDirectory, "mods/Codes.xml");
-				codedatpath = Path.Combine(App.CurrentGame.gameDirectory, "mods/Codes.dat");
-				patchdatpath = Path.Combine(App.CurrentGame.gameDirectory, "mods/Patches.dat");
+                updatePath = Path.Combine(App.CurrentGame.gameDirectory, "mods/.updates");
+                codelstpath = Path.Combine(App.CurrentGame.gameDirectory, "mods/Codes.lst");
+                codexmlpath = Path.Combine(App.CurrentGame.gameDirectory, "mods/Codes.xml");
+                codedatpath = Path.Combine(App.CurrentGame.gameDirectory, "mods/Codes.dat");
+                patchdatpath = Path.Combine(App.CurrentGame.gameDirectory, "mods/Patches.dat");
 
-				Elements.SADX.GameConfig.UpdateD3D8Paths();
 
-			}
-			else
-			{
-				App.CurrentGame.gameDirectory = string.Empty;
-			}
+                Elements.SADX.GameConfig.UpdateD3D8Paths();
 
-			App.CurrentGame.loader.installed = File.Exists(App.CurrentGame.loader.dataDllOriginPath);
-			UpdateButtonsState();
-            loaderini = File.Exists(loaderinipath) ? IniSerializer.Deserialize<SADXLoaderInfo>(loaderinipath) : new SADXLoaderInfo();
-		
-		}
+                //this is a failsafe in case the User deleted the Loader file manually without restoring the original files
+                if (!File.Exists(App.CurrentGame.loader.loaderdllpath) && File.Exists(App.CurrentGame.loader.dataDllOriginPath))
+                {
+                    await GamesInstall.InstallDLL_Loader(App.CurrentGame); //re install the loader to avoid corrupted install
+                    File.Copy(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, true);
+                }
+            }
+            else
+            {
+                App.CurrentGame.gameDirectory = string.Empty;
+            }
 
-		#region Private: Load & Save
-		private void LoadGameProfile()
-		{
-			string defaultProfile = Path.Combine(App.CurrentGame.ProfilesDirectory, "default.ini");
-			switch ((SetGame)App.configIni.GameManagement.CurrentSetGame)
-			{
-				case SetGame.SADX:
-					GameProfile = File.Exists(defaultProfile) ? IniSerializer.Deserialize<IniSettings.SADX.GameSettings>(defaultProfile) : new();
-					break;
-				case SetGame.SA2:
-					GameProfile = File.Exists(defaultProfile) ? IniSerializer.Deserialize<IniSettings.SA2.GameSettings>(defaultProfile) : new();
-					break;
-			}
+            App.CurrentGame.loader.installed = File.Exists(App.CurrentGame.loader.dataDllOriginPath) && File.Exists(App.CurrentGame.loader.loaderdllpath);
+            UpdateButtonsState();
+        }
 
-			if (File.Exists(defaultProfile))
-				SetProfileInComboBox();
-		}
+        public void UpdateManagerStatusText(string message, int timer = 3000)
+        {
+            Dispatcher?.Invoke(() => WhatTheManagerDoin.Text = message);
+            StatusTimer?.Change(timer, Timeout.Infinite);
+        }
 
-		private void SaveGameProfile()
-		{
-			if (!Directory.Exists(App.CurrentGame.ProfilesDirectory))
-				Directory.CreateDirectory(App.CurrentGame.ProfilesDirectory);
+        public string GetCurrentProfileName()
+        {
+            int index = comboProfile.SelectedIndex >= 0 ? comboProfile.SelectedIndex : 0;   
+            return GameProfiles.ProfilesList[index].Filename;
+        }
 
-			switch ((SetGame)App.configIni.GameManagement.CurrentSetGame)
-			{
-				case SetGame.SADX:
-					IniSerializer.Serialize(GameProfile, GetSelectedProfile());
-					break;
-				case SetGame.SA2:
-					IniSerializer.Serialize(GameProfile, GetSelectedProfile());
-					break;
+        #region Private: Load & Save
 
-			}
-		}
+        private void LoadGameConfigFile()
+        {
+            // TODO: Properly update this for loading SA2's config file.
+            List<string> gameConfig = new();
+            foreach (string file in App.CurrentGame.GameConfigFile)
+            {
+                gameConfig.Add(Path.Combine(App.CurrentGame.gameDirectory, file));
+            }
 
-		private void LoadGameConfigFile()
-		{
-			// TODO: Properly update this for loading SA2's config file.
-			List<string> gameConfig = new();
-			foreach (string file in App.CurrentGame.GameConfigFile)
-			{
-				gameConfig.Add(Path.Combine(App.CurrentGame.gameDirectory, file));
-			}
+            switch (setGame)
+            {
+                case SetGame.SADX:
+                    gameConfigFile = File.Exists(gameConfig[0]) ? IniSerializer.Deserialize<SADXConfigFile>(gameConfig[0]) : new SADXConfigFile();
+                    break;
+                case SetGame.SA2:
+                    break;
+            }
+        }
 
-			switch (setGame)
-			{
-				case SetGame.SADX:
-					gameConfigFile = File.Exists(gameConfig[0]) ? IniSerializer.Deserialize<GameConfigs.SADXConfigFile>(gameConfig[0]) : new SADXConfigFile();
-					break;
-				case SetGame.SA2:
-					break;
-			}
-		}
+        private void LoadCodes()
+        {
+            codes = new List<Code>(mainCodes.Codes);
+            codesSearch = new();
 
-		private void SaveGameConfig(string gamePath)
-		{
-			// TODO: Properly update this for loading SA2's config file.
-			List<string> gameConfig = new();
-			foreach (string file in App.CurrentGame.GameConfigFile)
-			{
-				gameConfig.Add(Path.Combine(App.CurrentGame.gameDirectory, file));
-			}
+            EnabledCodes = new List<string>(EnabledCodes.Where(a => codes.Any(c => c.Name == a)));
 
-			switch (setGame)
-			{
-				case SetGame.SADX:
-					IniSerializer.Serialize(gameConfigFile, Path.Combine(gameConfig[0]));
-					break;
-				case SetGame.SA2:
-					break;
-			}
-		}
+            CodeListView.BeginInit();
+            CodeListView.Items.Clear();
 
-		private void LoadCodes()
-		{
-			codes = new List<Code>(mainCodes.Codes);
-			codesSearch = new();
+            foreach (Code item in codes.Where(a => a.Required && !EnabledCodes.Contains(a.Name)))
+                EnabledCodes.Add(item.Name);
 
-			loaderini.EnabledCodes = new List<string>(loaderini.EnabledCodes.Where(a => codes.Any(c => c.Name == a)));
+            foreach (Code item in codes)
+            {
+                CodeData extraItem = new()
+                {
+                    codes = item,
+                    IsChecked = EnabledCodes.Contains(item.Name),
+                };
 
-			CodeListView.BeginInit();
-			CodeListView.Items.Clear();
+                codesSearch.Add(extraItem);
+                CodeListView.Items.Add(extraItem);
+            }
 
-			foreach (Code item in codes.Where(a => a.Required && !loaderini.EnabledCodes.Contains(a.Name)))
-				loaderini.EnabledCodes.Add(item.Name);
+            CodeListView.EndInit();
+        }
 
-			foreach (Code item in codes)
-			{
-				CodeData extraItem = new()
-				{
-					codes = item,
-					IsChecked = loaderini.EnabledCodes.Contains(item.Name),
-				};
+        private void BuildCodeFiles()
+        {
+            Dictionary<string, Code> codelist = new();
+            foreach (Code code in codes)
+                codelist.Add(code.Name, code);
+            List<Code> selectedCodes = new List<Code>();
+            List<Code> selectedPatches = new List<Code>();
 
-				codesSearch.Add(extraItem);
-				CodeListView.Items.Add(extraItem);
-			}
+            foreach (string name in EnabledCodes)
+            {
+                if (codelist.ContainsKey(name))
+                {
+                    Code code = codelist[name];
+                    if (code.Patch)
+                        selectedPatches.Add(code);
+                    else
+                        selectedCodes.Add(code);
+                }
+            }
 
-			CodeListView.EndInit();
-		}
+            CodeList.WriteDatFile(patchdatpath, selectedPatches);
+            CodeList.WriteDatFile(codedatpath, selectedCodes);
 
-		private void SaveCodes()
-		{
-			List<Code> selectedCodes = new List<Code>();
-			List<Code> selectedPatches = new List<Code>();
+        }
 
-			foreach (CodeData code in CodeListView.Items)
-			{
-				var Code = code.codes;
-
-				if (code?.IsChecked == true)
-				{
-
-					if (Code.Patch)
-						selectedPatches.Add(Code);
-					else
-						selectedCodes.Add(Code);
-
-					if (!loaderini.EnabledCodes.Contains(Code.Name))
-						loaderini.EnabledCodes.Add(Code.Name);
-				}
-				else
-				{
-					if (loaderini.EnabledCodes.Contains(Code.Name))
-						loaderini.EnabledCodes.Remove(Code.Name);
-				}
-			}
-
-			CodeList.WriteDatFile(patchdatpath, selectedPatches);
-			CodeList.WriteDatFile(codedatpath, selectedCodes);
-
-		}
-		
-		private void UpdateButtonsState()
-		{
+        private void UpdateButtonsState()
+        {
             bool installed = App.CurrentGame != null ? App.CurrentGame.loader.installed : false;
-            UIHelper.ToggleButton(ref btnInstallLoader, installed);
-			UIHelper.ToggleImgButton(ref btnCheckUpdates, installed);
+            UIHelper.ToggleImgButton(ref btnCheckUpdates, installed);
             UpdateBtnInstallLoader_State();
             Update_PlayButtonsState();
         }
 
-		private void LoadSettings()
+		private void LoadSADXSettings(string profilePath, bool newSetup = false)
 		{
-			LoadGameProfile();
-			SetGamePath();
-			UpdateManagerInfo();
+			Configuration.SADX.GameSettings sadxSettings = File.Exists(profilePath) ? Configuration.SADX.GameSettings.Deserialize(profilePath) : new();
+			GameProfile = sadxSettings;
 
-			LoadGameConfigFile();
+			if (newSetup || sadxSettings.GamePath is null)
+                sadxSettings.GamePath = tempPath;
 
-			textGameDir.Text = App.CurrentGame.gameDirectory;
+			textGameDir.Text = sadxSettings.GamePath;
+			App.CurrentGame.gameDirectory = sadxSettings.GamePath;
+			App.CurrentGame.modDirectory = Path.Combine(sadxSettings.GamePath, "mods");
+
+			string configPath = Path.Combine(App.CurrentGame.gameDirectory, App.CurrentGame.GameConfigFile[0]);
+			gameConfigFile = File.Exists(configPath) ? IniSerializer.Deserialize<SADXConfigFile>(configPath) : new SADXConfigFile();
+
+			EnabledMods = sadxSettings.EnabledMods;
+			EnabledCodes = sadxSettings.EnabledCodes;
+			gameDebugSettings = sadxSettings.DebugSettings;
 		}
 
-		public async void Save()
+		private async void LoadSA2Settings(string profilePath)
 		{
-			// Save Manager Settings
-			IniSerializer.Serialize(App.configIni, App.ConfigPath);
+			// TODO: Add SA2 Support
+		}
 
-			if (!Directory.Exists(App.CurrentGame.modDirectory))
-				return;
+		private void LoadGameSettings(bool newSetup = false)
+        {
+			string profilePath = Path.Combine(App.CurrentGame.ProfilesDirectory, GameProfiles.GetProfileFilename());
 
-			// Save Enabled Mods
-			loaderini.Mods.Clear();
-			foreach (ModData mod in ViewModel.Modsdata)
-			{
-				if (mod?.IsChecked == true)
-				{
-					loaderini.Mods.Add(mod.Tag);
-				}
-			}
-
-			// Save Non-Bound Game Settings
 			switch (setGame)
 			{
 				case SetGame.SADX:
-					(GameProfile as IniSettings.SADX.GameSettings).GamePath = App.CurrentGame.gameDirectory;
-					Elements.SADX.GameConfig gameConfig = (Elements.SADX.GameConfig)(tabGame.Content as Grid).Children[0];
-					gameConfig.SavePatches(ref GameProfile);
-					Elements.SADX.TestSpawn spawnConfig = (Elements.SADX.TestSpawn)(tabTestSpawn.Content as Grid).Children[0];
-					spawnConfig.Save();
+					LoadSADXSettings(profilePath, newSetup);
+					break;
+				case SetGame.SA2:
 					break;
 			}
+        }
 
-			SaveCodes();
+        private async void SaveSADXSettings()
+        {
+            // Update any GameSettings Info first.
+            (GameProfile as Configuration.SADX.GameSettings).GamePath = App.CurrentGame.gameDirectory;
+            Elements.SADX.GameConfig gameConfig = (Elements.SADX.GameConfig)(tabGame.Content as Grid).Children[0];
+            gameConfig.SavePatches(ref GameProfile);
+            Elements.SADX.TestSpawn spawnConfig = (Elements.SADX.TestSpawn)(tabTestSpawn.Content as Grid).Children[0];
+            spawnConfig.Save();
 
-			// TODO: Proper function for saving to the original location. Regardless of updating the Loaders to use the new settings,
-			// saving to this location is useful for the Loaders.
-			loaderini.ConvertFromV1(App.configIni, GameProfile as IniSettings.SADX.GameSettings);
-			IniSerializer.Serialize(loaderini, loaderinipath);
+            Configuration.SADX.GameSettings sadxSettings = GameProfile as Configuration.SADX.GameSettings;
 
-			// Save Game Config file (Game used settings file)
-			SaveGameConfig(App.CurrentGame.gameDirectory);
+			// Save Selected Mods
+			sadxSettings.EnabledMods = EnabledMods;
+			sadxSettings.EnabledCodes = EnabledCodes;
+			sadxSettings.DebugSettings = gameDebugSettings;
 
-			// Save the Game Profile.
-			SaveGameProfile();
+            // Save Game Settings to Current Profile
+            string profilePath = Path.Combine(App.CurrentGame.ProfilesDirectory, GetCurrentProfileName());
+            await Task.Run(() => sadxSettings.Serialize(profilePath));
+
+            // Save Game Config File
+            string configPath = Path.Combine(App.CurrentGame.gameDirectory, App.CurrentGame.GameConfigFile[0]);
+            IniSerializer.Serialize(gameConfigFile, configPath);
+
+            // Save to Loader Info
+            await Task.Run(() => sadxSettings.WriteToLoaderInfo(App.CurrentGame.modDirectory, App.ManagerSettings));
+        }
+
+        private async void SaveSA2Settings()
+        {
+            // TODO: Nothing to do, it's not implemented yet.
+        }
+
+        public async void Load(bool newSetup = false)
+        {
+			if (setGame != SetGame.None)
+			{
+				// Load Profiles before doing anything.
+				string profiles = Path.Combine(App.CurrentGame.ProfilesDirectory, "Profiles.json");
+				GameProfiles = File.Exists(profiles) ? Profiles.Deserialize(profiles) : Profiles.MakeDefaultProfileFile();
+				comboProfile.ItemsSource = GameProfiles.ProfilesList;
+				comboProfile.DisplayMemberPath = "Name";
+
+				// Set the existing profiles to the ones from the loaded Manager Settings.
+				LoadGameSettings(newSetup);
+
+				await UpdateManagerInfo();
+
+                LoadModList();
+
+				InitCodes();
+			}
+            else
+            {
+                UIHelper.ToggleButton(ref btnOpenGameDir, false);
+            }
+
+			// Update the UI based on the loaded game.
+			SetGameUI();
 
 			await Task.Delay(200);
 
 			Refresh();
 		}
 
-		private void LoadModList()
-		{
-			btnMoveTop.IsEnabled = btnMoveUp.IsEnabled = btnMoveDown.IsEnabled = btnMoveBottom.IsEnabled = ConfigureModBtn.IsEnabled = false;
-			ViewModel.Modsdata.Clear();
-			mods = new Dictionary<string, SADXModInfo>();
+        public async void Save()
+        {
+			// If the mods folder doesn't exist, don't save anything.
+			if (!Directory.Exists(App.CurrentGame.modDirectory))
+                return;
 
-			bool modFolderExist = Directory.Exists(App.CurrentGame.modDirectory);
+            // Save Manager Settings
+			App.ManagerSettings.CurrentSetGame = (int)setGame;
+            App.ManagerSettings.Serialize(App.ManagerConfigFile);
 
-			//if mod folder doesn't exist and game path hasn't been set, give up the process of loading mods.
+			// Update EnabledMods for saving.
+			EnabledMods.Clear();
+			foreach (ModData mod in ViewModel.Modsdata)
+				if (mod?.IsChecked == true)
+					EnabledMods.Add(mod.Tag);
 
-			if (!modFolderExist && string.IsNullOrEmpty(App.CurrentGame.gameDirectory))
-			{
-				UpdateMainButtonsState();
-				return;
-			}
-			else if (Directory.Exists(App.CurrentGame.gameDirectory) && !modFolderExist)
-			{
-				Directory.CreateDirectory(App.CurrentGame.modDirectory);
-			}
+			// Update EnabledCodes for saving.
+			EnabledCodes.Clear();
+			foreach (CodeData code in CodeListView.Items)
+				if (code?.IsChecked == true)
+					EnabledCodes.Add(code.codes.Name);
 
-			if (File.Exists(Path.Combine(App.CurrentGame.modDirectory, "mod.ini")))
-			{
-				new MessageWindow(Lang.GetString("MessageWindow.DefaultTitle.Error"), Lang.GetString("MessageWindow.Errors.ModWithoutFolder0") + Lang.GetString("MessageWindow.Errors.ModWithoutFolder1") +
-							Lang.GetString("MessageWindow.Errors.ModWithoutFolder2"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Error,
-							MessageWindow.Buttons.OK).ShowDialog();
+			// Build the Code Files.
+			BuildCodeFiles();
 
-				Close();
-				return;
-			}
+			// Create the Profiles Directory if it doesn't exist.
+			if (!Directory.Exists(App.CurrentGame.ProfilesDirectory))
+				Directory.CreateDirectory(App.CurrentGame.ProfilesDirectory);
 
-			//browse the mods folder and get each mod name by their ini file
-			foreach (string filename in SADXModInfo.GetModFiles(new DirectoryInfo(App.CurrentGame.modDirectory)))
-			{
-				SADXModInfo mod = IniSerializer.Deserialize<SADXModInfo>(filename);
-				mods.Add((Path.GetDirectoryName(filename) ?? string.Empty).Substring(App.CurrentGame.modDirectory.Length + 1), mod);
-			}
+			// Save Game Settings here.
+			switch (setGame)
+            {
+                case SetGame.SADX:
+                    SaveSADXSettings();
+                    break;
+            }
 
+			// Save the Profiles file.
+			GameProfiles.Serialize(Path.Combine(App.CurrentGame.ProfilesDirectory, "Profiles.json"));
 
-			foreach (string mod in new List<string>(loaderini.Mods))
-			{
-				if (mods.ContainsKey(mod))
-				{
-					SADXModInfo inf = mods[mod];
-					suppressEvent = true;
-					var item = new ModData()
-					{
-						Name = inf.Name,
-						Author = inf.Author,
-						AuthorURL = inf.AuthorURL,
-						Description = inf.Description,
-						Version = inf.Version,
-						Category = inf.Category,
-						SourceCode = inf.SourceCode,
-						IsChecked = true,
-						Tag = mod
-					};
+            await Task.Delay(10);
 
-					ViewModel.Modsdata.Add(item);
+			// Refresh thing so everything updates as intended.
+            Refresh();
+        }
 
-					//if a mod has a code, add it to the list
-					if (!string.IsNullOrEmpty(inf.Codes))
-					{
-						var t = CodeList.Load(Path.Combine(Path.Combine(App.CurrentGame.modDirectory, mod), inf.Codes));
-						codes.AddRange(t.Codes);
+        private void LoadModList()
+        {
+            btnMoveTop.IsEnabled = btnMoveUp.IsEnabled = btnMoveDown.IsEnabled = btnMoveBottom.IsEnabled = ConfigureModBtn.IsEnabled = false;
+            ViewModel.Modsdata.Clear();
+            mods = new Dictionary<string, SADXModInfo>();
 
-						foreach (var code in t.Codes)
-						{
-							CodeData extraItem = new()
-							{
-								codes = code,
-								IsChecked = loaderini.EnabledCodes.Contains(item.Name),
-							};
+            bool modFolderExist = Directory.Exists(App.CurrentGame.modDirectory);
 
-							extraItem.codes.Category = "Codes From " + inf.Name;
-							codesSearch.Add(extraItem);
-							CodeListView.Items.Add(extraItem);
-						}
-					}
+            //if mod folder doesn't exist and game path hasn't been set, give up the process of loading mods.
 
-					suppressEvent = false;
-				}
-				else
-				{
-					new MessageWindow(Lang.GetString("MessageWindow.DefaultTitle"), "Mod \"" + mod + "\"" + Lang.GetString("MessageWindow.Errors.ModNotFound"), MessageWindow.WindowType.Message, MessageWindow.Icons.Information, MessageWindow.Buttons.OK).ShowDialog();
-					loaderini.Mods.Remove(mod);
-				}
-			}
+            if (!modFolderExist && string.IsNullOrEmpty(App.CurrentGame.gameDirectory))
+            {
+                UpdateMainButtonsState();
+                return;
+            }
+            else if (Directory.Exists(App.CurrentGame.gameDirectory) && !modFolderExist)
+            {
+                Directory.CreateDirectory(App.CurrentGame.modDirectory);
+            }
 
-			foreach (KeyValuePair<string, SADXModInfo> inf in mods.OrderBy(x => x.Value.Name))
-			{
-				if (!loaderini.Mods.Contains(inf.Key))
-				{
-					var item = new ModData()
-					{
-						Name = inf.Value.Name,
-						Author = inf.Value.Author,
-						AuthorURL = inf.Value.AuthorURL,
-						Description = inf.Value.Description,
-						Version = inf.Value.Version,
-						Category = inf.Value.Category,
-						SourceCode = inf.Value.SourceCode,
-						IsChecked = false,
-						Tag = inf.Key,
-					};
+            if (File.Exists(Path.Combine(App.CurrentGame.modDirectory, "mod.ini")))
+            {
+                new MessageWindow(Lang.GetString("MessageWindow.DefaultTitle.Error"), Lang.GetString("MessageWindow.Errors.ModWithoutFolder0") + Lang.GetString("MessageWindow.Errors.ModWithoutFolder1") +
+                            Lang.GetString("MessageWindow.Errors.ModWithoutFolder2"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Error,
+                            MessageWindow.Buttons.OK).ShowDialog();
 
-					ViewModel.Modsdata.Add(item);
-				}
-			}
+                Close();
+                return;
+            }
 
+            //browse the mods folder and get each mod name by their ini file
+            foreach (string filename in SADXModInfo.GetModFiles(new DirectoryInfo(App.CurrentGame.modDirectory)))
+            {
+                SADXModInfo mod = IniSerializer.Deserialize<SADXModInfo>(filename);
+                mods.Add((Path.GetDirectoryName(filename) ?? string.Empty).Substring(App.CurrentGame.modDirectory.Length + 1), mod);
+            }
 
-			DataContext = ViewModel;
-			ConfigureModBtn_UpdateState();
-		}
+            foreach (string mod in EnabledMods.ToList())
+            {
+                if (mods.ContainsKey(mod))
+                {
+                    SADXModInfo inf = mods[mod];
+                    suppressEvent = true;
+                    var item = new ModData()
+                    {
+                        Name = inf.Name,
+                        Author = inf.Author,
+                        AuthorURL = inf.AuthorURL,
+                        Description = inf.Description,
+                        Version = inf.Version,
+                        Category = inf.Category,
+                        SourceCode = inf.SourceCode,
+                        IsChecked = true,
+                        Tag = mod
+                    };
 
-		private void Save_AppUserSettings()
-		{
-			Settings.Default.Save();
-		}
-		#endregion
+                    ViewModel.Modsdata.Add(item);
 
-		#region Private: Update
+                    //if a mod has a code, add it to the list
+                    if (!string.IsNullOrEmpty(inf.Codes))
+                    {
+                        var t = CodeList.Load(Path.Combine(Path.Combine(App.CurrentGame.modDirectory, mod), inf.Codes));
+                        codes.AddRange(t.Codes);
 
-		private void Update_PlayButtonsState()
-		{
-			bool isInstalled = App.CurrentGame.loader.installed;
-			UIHelper.ToggleButton(ref SaveAndPlayButton, isInstalled);
-			Image iconSavePlay = FindName("savePlayIcon") as Image;
-			UIHelper.ToggleImage(ref iconSavePlay, isInstalled);
-		}
+                        foreach (var code in t.Codes)
+                        {
+                            CodeData extraItem = new()
+                            {
+                                codes = code,
+                                IsChecked = EnabledCodes.Contains(item.Name),
+                            };
 
-		private void UpdateMainButtonsState()
-		{
-			ConfigureModBtn_UpdateState();
-			AddModBtn_UpdateState();
-		}
+                            extraItem.codes.Category = "Codes From " + inf.Name;
+                            codesSearch.Add(extraItem);
+                            CodeListView.Items.Add(extraItem);
+                        }
+                    }
 
-		private void UpdateChecker_EnableControls()
-		{
-			UIHelper.ToggleImgButton(ref btnCheckUpdates, true);
+                    suppressEvent = false;
+                }
+                else
+                {
+                    new MessageWindow(Lang.GetString("MessageWindow.DefaultTitle"), "Mod \"" + mod + "\"" + Lang.GetString("MessageWindow.Errors.ModNotFound"), MessageWindow.WindowType.Message, MessageWindow.Icons.Information, MessageWindow.Buttons.OK).ShowDialog();
+                    EnabledMods.Remove(mod);
+                }
+            }
 
-			ModContextChkUpdate.IsEnabled = true;
-			if (ModContextDev is not null)
-			{
-				ModContextDev.IsEnabled = true;
-			}
+            foreach (KeyValuePair<string, SADXModInfo> inf in mods.OrderBy(x => x.Value.Name))
+            {
+                if (!EnabledMods.Contains(inf.Key))
+                {
+                    var item = new ModData()
+                    {
+                        Name = inf.Value.Name,
+                        Author = inf.Value.Author,
+                        AuthorURL = inf.Value.AuthorURL,
+                        Description = inf.Value.Description,
+                        Version = inf.Value.Version,
+                        Category = inf.Value.Category,
+                        SourceCode = inf.Value.SourceCode,
+                        IsChecked = false,
+                        Tag = inf.Key,
+                    };
 
-			ModContextDeleteMod.IsEnabled = true;
-			ModContextForceModUpdate.IsEnabled = true;
-			ModContextVerifyIntegrity.IsEnabled = true;
-		}
-
-		private async Task UpdateSelectedMods()
-		{
-			manualModUpdate = true;
-			modUpdater.updatableMods = listMods.SelectedItems
-			.OfType<ModData>()
-			.Select(mod => new KeyValuePair<string, ModInfo>(mod.Tag, mods[mod.Tag]))
-			.ToList();
-
-			await ExecuteModsUpdateCheck();
-		}
-
-		private async Task UpdateChecker_DoWork()
-		{
-
-			Dispatcher.Invoke(() =>
-			{
-				UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
-				ModContextChkUpdate.IsEnabled = false;
-				ModContextDeleteMod.IsEnabled = false;
-				if (ModContextDev is not null)
-					ModContextDev.IsEnabled = false;
-				ModContextForceModUpdate.IsEnabled = false;
-				ModContextVerifyIntegrity.IsEnabled = false;
-			});
-
-			var tokenSource = new CancellationTokenSource();
-			CancellationToken token = tokenSource.Token;
-			// out updates, out errors,
-
-			try
-			{
-				await Task.Run(() => modUpdater.GetModUpdates(App.CurrentGame.modDirectory, token), token);
-			}
-			catch (OperationCanceledException)
-			{
-				// Handle cancellation if needed
-			}
+                    ViewModel.Modsdata.Add(item);
+                }
+            }
 
 
-			modUpdater.modUpdatesTuple = new(modUpdater.modUpdateHelper.updates, modUpdater.modUpdateHelper.errors);
-		}
+            DataContext = ViewModel;
+            ConfigureModBtn_UpdateState();
+        }
 
-		private async Task UpdateChecker_DoWorkForced()
-		{
+        private void Save_AppUserSettings()
+        {
+            Settings.Default.Save();
+        }
+        #endregion
 
-			if (modUpdater.modUpdatesTuple is null)
-			{
-				return;
-			}
+        #region Private: Update
 
-			var updatableMods = modUpdater.modManifestTuple;
+        private void Update_PlayButtonsState()
+        {
+            bool isInstalled = App.CurrentGame.loader.installed;
+            UIHelper.ToggleButton(ref SaveAndPlayButton, isInstalled);
+            Image iconSavePlay = FindName("savePlayIcon") as Image;
+            UIHelper.ToggleImage(ref iconSavePlay, isInstalled);
+        }
 
-			var updates = new List<ModDownloadWPF>();
-			var errors = new List<string>();
+        private void UpdateMainButtonsState()
+        {
+            ConfigureModBtn_UpdateState();
+            AddModBtn_UpdateState();
+        }
 
-			using (var client = new UpdaterWebClient())
-			{
-				foreach (Tuple<string, ModInfo, List<Updater.ModManifestDiff>> info in updatableMods)
-				{
-					/*if (worker.CancellationPending)
+        private void UpdateChecker_EnableControls()
+        {
+            UpdateManagerStatusText(Lang.GetString("UpdateStatus.NoUpdateFound"));
+            UIHelper.ToggleImgButton(ref btnCheckUpdates, true);
+
+            ModContextChkUpdate.IsEnabled = true;
+            if (ModContextDev is not null)
+            {
+                ModContextDev.IsEnabled = true;
+            }
+
+            ModContextDeleteMod.IsEnabled = true;
+            ModContextForceModUpdate.IsEnabled = true;
+            ModContextVerifyIntegrity.IsEnabled = true;
+
+        }
+
+        private async Task UpdateSelectedMods()
+        {
+            manualModUpdate = true;
+            modUpdater.updatableMods = listMods.SelectedItems
+            .OfType<ModData>()
+            .Select(mod => new KeyValuePair<string, ModInfo>(mod.Tag, mods[mod.Tag]))
+            .ToList();
+
+            await ExecuteModsUpdateCheck();
+        }
+
+        private async Task UpdateChecker_DoWork()
+        {
+
+            Dispatcher.Invoke(() =>
+            {
+                UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
+                ModContextChkUpdate.IsEnabled = false;
+                ModContextDeleteMod.IsEnabled = false;
+                if (ModContextDev is not null)
+                    ModContextDev.IsEnabled = false;
+                ModContextForceModUpdate.IsEnabled = false;
+                ModContextVerifyIntegrity.IsEnabled = false;
+            });
+
+            var tokenSource = new CancellationTokenSource();
+            CancellationToken token = tokenSource.Token;
+            // out updates, out errors,
+
+            try
+            {
+                await Task.Run(() => modUpdater.GetModUpdates(App.CurrentGame.modDirectory, token), token);
+            }
+            catch (OperationCanceledException)
+            {
+                // Handle cancellation if needed
+            }
+
+
+            modUpdater.modUpdatesTuple = new(modUpdater.modUpdateHelper.updates, modUpdater.modUpdateHelper.errors);
+        }
+
+        private async Task UpdateChecker_DoWorkForced()
+        {
+
+            if (modUpdater.modUpdatesTuple is null || modUpdater.modManifestTuple.Count == 0)
+            {
+                return;
+            }
+
+            var updatableMods = modUpdater.modManifestTuple;
+
+            var updates = new List<ModDownloadWPF>();
+            var errors = new List<string>();
+
+            using (var client = new UpdaterWebClient())
+            {
+                foreach (Tuple<string, ModInfo, List<Updater.ModManifestDiff>> info in updatableMods)
+                {
+                    /*if (worker.CancellationPending)
 					{
 						e.Cancel = true;
 						break;
 					}*/
 
-					ModInfo mod = info.Item2;
-					if (!string.IsNullOrEmpty(mod.GitHubRepo))
-					{
-						if (string.IsNullOrEmpty(mod.GitHubAsset))
-						{
-							errors.Add($"[{mod.Name}] GitHubRepo specified, but GitHubAsset is missing.");
-							continue;
-						}
+                    ModInfo mod = info.Item2;
+                    if (!string.IsNullOrEmpty(mod.GitHubRepo))
+                    {
+                        if (string.IsNullOrEmpty(mod.GitHubAsset))
+                        {
+                            errors.Add($"[{mod.Name}] GitHubRepo specified, but GitHubAsset is missing.");
+                            continue;
+                        }
 
-						ModDownloadWPF d = await modUpdater.GetGitHubReleases(mod, App.CurrentGame.modDirectory, info.Item1, client, errors);
-						if (d != null)
-						{
-							updates.Add(d);
-						}
-					}
-					else if (!string.IsNullOrEmpty(mod.GameBananaItemType) && mod.GameBananaItemId.HasValue)
-					{
-						ModDownloadWPF d = await modUpdater.GetGameBananaReleases(mod, App.CurrentGame.modDirectory, info.Item1, errors);
-						if (d != null)
-						{
-							updates.Add(d);
-						}
-					}
-					else if (!string.IsNullOrEmpty(mod.UpdateUrl))
-					{
-						List<Updater.ModManifestEntry> localManifest = info.Item3
-							.Where(x => x.State == Updater.ModManifestState.Unchanged)
-							.Select(x => x.Current)
-							.ToList();
+                        ModDownloadWPF d = await modUpdater.GetGitHubReleases(mod, App.CurrentGame.modDirectory, info.Item1, client, errors);
+                        if (d != null)
+                        {
+                            updates.Add(d);
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(mod.GameBananaItemType) && mod.GameBananaItemId.HasValue)
+                    {
+                        ModDownloadWPF d = await modUpdater.GetGameBananaReleases(mod, App.CurrentGame.modDirectory, info.Item1, errors);
+                        if (d != null)
+                        {
+                            updates.Add(d);
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(mod.UpdateUrl))
+                    {
+                        List<Updater.ModManifestEntry> localManifest = info.Item3
+                            .Where(x => x.State == Updater.ModManifestState.Unchanged)
+                            .Select(x => x.Current)
+                            .ToList();
 
-						ModDownloadWPF d = await modUpdater.CheckModularVersion(mod, App.CurrentGame.modDirectory, info.Item1, localManifest, client, errors);
-						if (d != null)
-						{
-							updates.Add(d);
-						}
-					}
-				}
-			}
+                        ModDownloadWPF d = await modUpdater.CheckModularVersion(mod, App.CurrentGame.modDirectory, info.Item1, localManifest, client, errors);
+                        if (d != null)
+                        {
+                            updates.Add(d);
+                        }
+                    }
+                }
+            }
 
-			modUpdater.modUpdatesTuple = new Tuple<List<ModDownloadWPF>, List<string>>(updates, errors);
-		}
+            modUpdater.modUpdatesTuple = new Tuple<List<ModDownloadWPF>, List<string>>(updates, errors);
+        }
 
-		private async Task ExecuteModsUpdateCheck()
-		{
-			await UpdateChecker_DoWork();
-			await UpdateChecker_RunWorkerCompleted();
-			UpdateChecker_EnableControls();
-		}
+        private async Task ExecuteModsUpdateCheck()
+        {
+            await UpdateChecker_DoWork();
+            await UpdateChecker_RunWorkerCompleted();
+            UpdateChecker_EnableControls();
 
-		private async Task UpdateChecker_RunWorkerCompleted()
-		{
-			if (modUpdater.ForceUpdate)
-			{
-				modUpdater.ForceUpdate = false;
-				modUpdater.Clear();
-			}
+        }
+
+        private async Task UpdateChecker_RunWorkerCompleted()
+        {
+            if (modUpdater.ForceUpdate)
+            {
+                modUpdater.ForceUpdate = false;
+                modUpdater.Clear();
+            }
 
 
-			if (modUpdater.modUpdatesTuple is not Tuple<List<ModDownloadWPF>, List<string>> data)
-			{
-				return;
-			}
+            if (modUpdater.modUpdatesTuple is not Tuple<List<ModDownloadWPF>, List<string>> data)
+            {
+                return;
+            }
 
-			List<string> Errors = data.Item2;
-			if (Errors.Count != 0)
-			{
-				string msgError = Lang.GetString("MessageWindow.Errors.CheckUpdateError");
-				string title = Lang.GetString("MessageWindow.Errors.CheckUpdateError.Title");
+            List<string> Errors = data.Item2;
+            if (Errors.Count != 0)
+            {
+                string msgError = Lang.GetString("MessageWindow.Errors.CheckUpdateError");
+                string title = Lang.GetString("MessageWindow.Errors.CheckUpdateError.Title");
 
-				foreach (var error in Errors)
-				{
-					msgError += "\n\n" + error;
-				}
+                foreach (var error in Errors)
+                {
+                    msgError += "\n\n" + error;
+                }
 
                 if (msgError.Contains("403"))
                 {
@@ -1633,488 +1786,403 @@ namespace SAModManager
                 }
 
                 new MessageWindow(title, msgError, MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Error, MessageWindow.Buttons.OK).ShowDialog();
-			}
+                await Task.Delay(0);
+            }
 
-			bool manual = manualModUpdate;
-			manualModUpdate = false;
+            bool manual = manualModUpdate;
+            manualModUpdate = false;
 
-			List<ModDownloadWPF> updates = data.Item1;
-			if (updates.Count == 0)
-			{
-				if (manual)
-				{
-					new MessageWindow(Lang.GetString("MessageWindow.Information.NoAvailableUpdates.Title"), Lang.GetString("MessageWindow.Information.NoAvailableUpdates"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Information, MessageWindow.Buttons.OK).ShowDialog();
-				}
-				return;
-			}
+            List<ModDownloadWPF> updates = data.Item1;
+            if (updates.Count == 0)
+            {
+                if (manual)
+                {
+                    UpdateManagerStatusText(Lang.GetString("UpdateStatus.NoUpdateFound"));
+                    new MessageWindow(Lang.GetString("MessageWindow.Information.NoAvailableUpdates.Title"), Lang.GetString("MessageWindow.Information.NoAvailableUpdates"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Information, MessageWindow.Buttons.OK).ShowDialog();
+                }
+                return;
+            }
 
-			var dialog = new ModChangelog(updates);
-			dialog.ShowDialog();
+            var dialog = new ModChangelog(updates);
+            dialog.ShowDialog();
 
-			bool? res = dialog.DialogResult;
-			if (res != true)
-			{
-				return;
-			}
+            bool? res = dialog.DialogResult;
+            if (res != true)
+            {
+                return;
+            }
 
-			updates = dialog.SelectedMods;
-
-
-			if (updates.Count == 0)
-			{
-				return;
-			}
-
-			try
-			{
-				if (!Directory.Exists(updatePath))
-				{
-					Directory.CreateDirectory(updatePath);
-				}
-			}
-			catch (Exception ex)
-			{
-
-			}
+            updates = dialog.SelectedMods;
 
 
-			new Updater.ModDownloadDialogWPF(updates, updatePath).ShowDialog();
+            if (updates.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                if (!Directory.Exists(updatePath))
+                {
+                    Directory.CreateDirectory(updatePath);
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
 
 
-			Refresh();
-		}
+            new Updater.ModDownloadDialogWPF(updates, updatePath).ShowDialog();
 
-		private async Task CheckForModUpdates(bool force = false)
-		{
-			if (!force && !App.configIni.UpdateSettings.EnableModsBootCheck)
-			{
-				return;
-			}
 
-			if (!force && !Updater.UpdateHelper.UpdateTimeElapsed(App.configIni.UpdateSettings.UpdateCheckCount, App.configIni.UpdateSettings.UpdateTimeOutCD))
-			{
-				UpdateHelper.HandleRefreshUpdateCD();
-				IniSerializer.Serialize(App.configIni, App.ConfigPath);
-				return;
-			}
+            Refresh();
+        }
 
-			modUpdater.updatableMods = mods.Select(x => new KeyValuePair<string, ModInfo>(x.Key, x.Value)).ToList();
+        private async Task CheckForModUpdates(bool force = false)
+        {
+            if (!force && !App.ManagerSettings.UpdateSettings.EnableModsBootCheck)
+            {
+                return;
+            }
+
+            if (!force && !Updater.UpdateHelper.UpdateTimeElapsed(App.ManagerSettings.UpdateSettings.UpdateCheckCount, App.ManagerSettings.UpdateSettings.UpdateTimeOutCD))
+            {
+                UpdateHelper.HandleRefreshUpdateCD();
+				App.ManagerSettings.Serialize(App.ManagerConfigFile);
+                return;
+            }
+
+            UpdateManagerStatusText(Lang.GetString("UpdateStatus.ChkModsUpdates"));
+            modUpdater.updatableMods = mods.Select(x => new KeyValuePair<string, ModInfo>(x.Key, x.Value)).ToList();
 
             await ExecuteModsUpdateCheck();
 
             if (!force)
             {
-                App.configIni.UpdateSettings.UpdateCheckCount++;
+                App.ManagerSettings.UpdateSettings.UpdateCheckCount++;
                 UpdateHelper.HandleRefreshUpdateCD();
-                IniSerializer.Serialize(App.configIni, App.ConfigPath);
+				App.ManagerSettings.Serialize(App.ManagerConfigFile);
             }
-		}
-		#endregion
+        }
+        #endregion
 
-		#region Setup Bindings
-		private void SetGameDebugBindings()
-		{
-			checkEnableLogConsole.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDebugConsole")
-			{
-				Source = gameDebugSettings,
-				Mode = BindingMode.TwoWay
-			});
-			checkEnableLogScreen.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDebugScreen")
-			{
-				Source = gameDebugSettings,
-				Mode = BindingMode.TwoWay
-			});
-			checkEnableLogFile.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDebugFile")
-			{
-				Source = gameDebugSettings,
-				Mode = BindingMode.TwoWay
-			});
-			checkEnableCrashDump.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDebugCrashLog")
-			{
-				Source = gameDebugSettings,
-				Mode = BindingMode.TwoWay
-			});
-		}
+        #region Setup Bindings
+        private void SetGameDebugBindings()
+        {
+            checkEnableLogConsole.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDebugConsole")
+            {
+                Source = gameDebugSettings,
+            });
+            checkEnableLogScreen.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDebugScreen")
+            {
+                Source = gameDebugSettings,
+            });
+            checkEnableLogFile.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDebugFile")
+            {
+                Source = gameDebugSettings,
+            });
+            checkEnableCrashDump.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDebugCrashLog")
+            {
+                Source = gameDebugSettings,
+            });
+        }
 
-		private void SetManagerBindings()
-		{
-			//comboProfile.SetBinding(ComboBox.SelectedIndexProperty, new Binding("ProfileIndex")
-			//{
-				//Source = App.configIni,
-			//});
-			comboLanguage.SetBinding(ComboBox.SelectedIndexProperty, new Binding("Language")
-			{
-				Source = App.configIni
-			});
-			comboThemes.SetBinding(ComboBox.SelectedIndexProperty, new Binding("Theme")
-			{
-				Source = App.configIni
-			});
-			chkUpdatesML.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableManagerBootCheck")
-			{
-				Source = App.configIni.UpdateSettings,
-			});
-			chkUpdatesMods.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableModsBootCheck")
-			{
-				Source = App.configIni.UpdateSettings
-			});
-			checkDevEnabled.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDeveloperMode")
-			{
-				Source = App.configIni
-			});
-			checkManagerOpen.SetBinding(CheckBox.IsCheckedProperty, new Binding("KeepManagerOpen")
-			{
-				Source = App.configIni
-			});
-			tabTestSpawn.SetBinding(TabItem.VisibilityProperty, new Binding("IsChecked")
-			{
-				Source = checkDevEnabled,
-				Mode = BindingMode.OneWay,
-				Converter = new VisibilityConverter()
-			});
-		}
+        private void SetManagerBindings()
+        {	
+            comboLanguage.SetBinding(ComboBox.SelectedIndexProperty, new Binding("Language")
+            {
+                Source = App.ManagerSettings
+            });
+            comboThemes.SetBinding(ComboBox.SelectedIndexProperty, new Binding("Theme")
+            {
+                Source = App.ManagerSettings
+            });
+            chkUpdatesML.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableManagerBootCheck")
+            {
+                Source = App.ManagerSettings.UpdateSettings,
+            });
+            chkUpdatesMods.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableModsBootCheck")
+            {
+                Source = App.ManagerSettings.UpdateSettings
+            });
+            checkDevEnabled.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDeveloperMode")
+            {
+                Source = App.ManagerSettings
+            });
+            checkManagerOpen.SetBinding(CheckBox.IsCheckedProperty, new Binding("KeepManagerOpen")
+            {
+                Source = App.ManagerSettings
+            });
+            tabTestSpawn.SetBinding(TabItem.VisibilityProperty, new Binding("IsChecked")
+            {
+                Source = checkDevEnabled,
+                Mode = BindingMode.OneWay,
+                Converter = new VisibilityConverter()
+            });
+        }
 
-		private void SetBindings()
-		{
-			SetGameDebugBindings();
-			SetManagerBindings();
-		}
-		#endregion
+        private void SetBindings()
+        {
+            SetGameDebugBindings();
+            SetManagerBindings();
+        }
+        #endregion
 
-		#region Private: Mods Tab
-		public void FilterMods(string text)
-		{
-			ViewModel.ModsSearch.Clear();
+        #region Private: Mods Tab
+        public void FilterMods(string text)
+        {
+            ViewModel.ModsSearch.Clear();
 
-			foreach (var mod in ViewModel.Modsdata)
-			{
-				if (mod.Name.ToLowerInvariant().Contains(text) || mod.Author is not null && mod.Author.ToLowerInvariant().Contains(text))
-				{
-					ViewModel.ModsSearch.Add(mod); // Add filtered items to the ModsSearch collection.
-				}
-			}
+            foreach (var mod in ViewModel.Modsdata)
+            {
+                if (mod.Name.ToLowerInvariant().Contains(text) || mod.Author is not null && mod.Author.ToLowerInvariant().Contains(text))
+                {
+                    ViewModel.ModsSearch.Add(mod); // Add filtered items to the ModsSearch collection.
+                }
+            }
 
-			string path = BindingOperations.GetBinding(listMods, ListView.ItemsSourceProperty).Path.Path;
-			string newPath = text.Length == 0 ? "Modsdata" : "ModsSearch";
+            string path = BindingOperations.GetBinding(listMods, ListView.ItemsSourceProperty).Path.Path;
+            string newPath = text.Length == 0 ? "Modsdata" : "ModsSearch";
 
-			if (path != newPath)
-			{
-				Binding binding = new()
-				{
-					Path = new PropertyPath(newPath)
-				};
+            if (path != newPath)
+            {
+                Binding binding = new()
+                {
+                    Path = new PropertyPath(newPath)
+                };
 
-				listMods.SetBinding(ListView.ItemsSourceProperty, binding);
-				listMods.SetValue(GongSolutions.Wpf.DragDrop.DragDrop.IsDragSourceProperty, text.Length == 0 ? true : false);
-				listMods.SetValue(GongSolutions.Wpf.DragDrop.DragDrop.IsDropTargetProperty, text.Length == 0 ? true : false);
-			}
-		}
+                listMods.SetBinding(ListView.ItemsSourceProperty, binding);
+                listMods.SetValue(GongSolutions.Wpf.DragDrop.DragDrop.IsDragSourceProperty, text.Length == 0 ? true : false);
+                listMods.SetValue(GongSolutions.Wpf.DragDrop.DragDrop.IsDropTargetProperty, text.Length == 0 ? true : false);
+            }
+        }
 
-		public void Refresh()
-		{
-			InitCodes();
-			LoadModList();
-			if (ModsFind.Visibility == Visibility.Visible)
-			{
-				FilterMods(TextBox_ModsSearch.Text.ToLowerInvariant());
-			}
-		}
+        public async void Refresh()
+        {
+            InitCodes();
+            LoadModList();
+            if (ModsFind.Visibility == Visibility.Visible)
+            {
+                FilterMods(TextBox_ModsSearch.Text.ToLowerInvariant());
+            }
 
-		private void OpenAboutModWindow(ModData mod)
-		{
-			new AboutMod(mod).ShowDialog();
-		}
+            if (!checkForUpdate)
+            {
+                if (listMods.Items.Count > 0)
+                    UpdateManagerStatusText(string.Format(Lang.GetString("UpdateStatus.TotalMods"), listMods.Items.Count), 2000);
+                await Task.Delay(2200);
 
-		private void RefreshModList()
-		{
-			ICollectionView view = CollectionViewSource.GetDefaultView(listMods.Items);
-			view.Refresh();
-		}
+                if (CodeListView.Items.Count > 0)
+                    UpdateManagerStatusText(string.Format(Lang.GetString("UpdateStatus.TotalCodes"), CodeListView.Items.Count), 2000);
+            }   
+        }
 
-		private ModData GetModFromView(object sender)
-		{
-			if (sender is ListViewItem lvItem)
-				return lvItem.Content as ModData;
-			else if (sender is ListView lv)
-				return lv.SelectedItem as ModData;
+        private void OpenAboutModWindow(ModData mod)
+        {
+            new AboutMod(mod).ShowDialog();
+        }
 
-			return null;
-		}
+        private void RefreshModList()
+        {
+            ICollectionView view = CollectionViewSource.GetDefaultView(listMods.Items);
+            view.Refresh();
+        }
 
-		private void InitModConfig()
-		{
-			var mod = (ModData)listMods.SelectedItem;
+        private ModData GetModFromView(object sender)
+        {
+            if (sender is ListViewItem lvItem)
+                return lvItem.Content as ModData;
+            else if (sender is ListView lv)
+                return lv.SelectedItem as ModData;
 
-			if (mod is not null)
-			{
-				SADXModInfo modInfo = mods[mod.Tag];
-				string fullPath = Path.Combine(App.CurrentGame.modDirectory, mod.Tag);
-				Common.ModConfig config = new(modInfo.Name, fullPath);
-				config.ShowDialog();
-			}
-		}
+            return null;
+        }
 
-		private void ConfigureModBtn_UpdateState()
-		{
-			bool configMod = ConfigureModBtn.IsEnabled;
-			//get the config icon image, check if it's not null, then change its oppacity depending if the button is enabled or not.
-			Image iconConfig = FindName("configIcon") as Image;
-			UIHelper.ToggleImage(ref iconConfig, configMod);
-			ConfigureModBtn.Opacity = ConfigureModBtn.IsEnabled ? 1 : 0.3;
-		}
+        private void InitModConfig()
+        {
+            var mod = (ModData)listMods.SelectedItem;
 
-		private void AddModBtn_UpdateState()
-		{
-			bool isInstalled = App.CurrentGame.loader.installed;
-			Image iconConfig = FindName("newIcon") as Image;
-			UIHelper.ToggleImage(ref iconConfig, isInstalled);
-			UIHelper.ToggleImgButton(ref NewModBtn, isInstalled);
-		}
-		#endregion
+            if (mod is not null)
+            {
+                SADXModInfo modInfo = mods[mod.Tag];
+                string fullPath = Path.Combine(App.CurrentGame.modDirectory, mod.Tag);
+                Common.ModConfig config = new(modInfo.Name, fullPath);
+                config.ShowDialog();
+            }
+        }
 
-		#region Private: Codes Tab
-		public void FilterCodes(string text)
-		{
-			CodeListView.Items.Clear();
+        private void ConfigureModBtn_UpdateState()
+        {
+            bool configMod = ConfigureModBtn.IsEnabled;
+            //get the config icon image, check if it's not null, then change its oppacity depending if the button is enabled or not.
+            Image iconConfig = FindName("configIcon") as Image;
+            UIHelper.ToggleImage(ref iconConfig, configMod);
+            ConfigureModBtn.Opacity = ConfigureModBtn.IsEnabled ? 1 : 0.3;
+        }
 
-			int enabledIndex = 0;
+        private void AddModBtn_UpdateState()
+        {
+            bool isInstalled = App.CurrentGame.loader.installed;
+            Image iconConfig = FindName("newIcon") as Image;
+            UIHelper.ToggleImage(ref iconConfig, isInstalled);
+            UIHelper.ToggleImgButton(ref NewModBtn, isInstalled);
+        }
+        #endregion
 
-			foreach (CodeData item in codesSearch)
-			{
-				if (item.codes.Name.ToLowerInvariant().Contains(text) || (item.codes.Author != null && item.codes.Author.ToLowerInvariant().Contains(text)))
-				{
-					if (item.IsChecked)
-						CodeListView.Items.Insert(enabledIndex++, item);
-					else
-						CodeListView.Items.Add(item);
-				}
-			}
-		}
+        #region Private: Codes Tab
+        public void FilterCodes(string text)
+        {
+            CodeListView.Items.Clear();
 
-		private void InitCodes()
-		{
-			try
-			{
-				if (File.Exists(codelstpath))
-					mainCodes = CodeList.Load(codelstpath);
-				else if (File.Exists(codexmlpath))
-					mainCodes = CodeList.Load(codexmlpath);
-				else
-					mainCodes = new CodeList();
+            int enabledIndex = 0;
 
-				LoadCodes();
-			}
-			catch (Exception ex)
-			{
-				string msg = " " + ex.Message;
-				new MessageWindow(Lang.GetString("MessageWindow.Errors.CodesListFailed.Title"), Lang.GetString("MessageWindow.Errors.CodesListFailed") + msg, MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Error, MessageWindow.Buttons.OK).ShowDialog();
-				mainCodes = new CodeList();
-			}
-		}
+            foreach (CodeData item in codesSearch)
+            {
+                if (item.codes.Name.ToLowerInvariant().Contains(text) || (item.codes.Author != null && item.codes.Author.ToLowerInvariant().Contains(text)))
+                {
+                    if (item.IsChecked)
+                        CodeListView.Items.Insert(enabledIndex++, item);
+                    else
+                        CodeListView.Items.Add(item);
+                }
+            }
+        }
 
-		private void OpenAboutCodeWindow(Code code)
-		{
-			new AboutCode(code).ShowDialog();
-		}
+        private void InitCodes()
+        {
+            try
+            {
+                if (File.Exists(codelstpath))
+                    mainCodes = CodeList.Load(codelstpath);
+                else if (File.Exists(codexmlpath))
+                    mainCodes = CodeList.Load(codexmlpath);
+                else
+                    mainCodes = new CodeList();
 
-		private CodeData GetCodeFromView(object sender)
-		{
-			if (sender is ListViewItem lvItem)
-				return lvItem.Content as CodeData;
-			else if (sender is ListView lv)
-				return lv.SelectedItem as CodeData;
+                LoadCodes();
+            }
+            catch (Exception ex)
+            {
+                string msg = " " + ex.Message;
+                new MessageWindow(Lang.GetString("MessageWindow.Errors.CodesListFailed.Title"), Lang.GetString("MessageWindow.Errors.CodesListFailed") + msg, MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Error, MessageWindow.Buttons.OK).ShowDialog();
+                mainCodes = new CodeList();
+            }
+        }
 
+        private void OpenAboutCodeWindow(Code code)
+        {
+            new AboutCode(code).ShowDialog();
+        }
 
-			return CodeListView.Items[CodeListView.SelectedIndex] as CodeData;
-		}
+        private CodeData GetCodeFromView(object sender)
+        {
+            if (sender is ListViewItem lvItem)
+                return lvItem.Content as CodeData;
+            else if (sender is ListView lv)
+                return lv.SelectedItem as CodeData;
 
 
-		#endregion
+            return CodeListView.Items[CodeListView.SelectedIndex] as CodeData;
+        }
+        #endregion
 
-		#region Private: Manager Config Tab
+        #region Private: Manager Config Tab
 
-		private void SetOneClickBtnState()
-		{
-			try
-			{
-				using var hkcr = Microsoft.Win32.Registry.ClassesRoot;
-				var sammKey = hkcr.OpenSubKey("sadxmm");
+        private void btnOpenGameDir_Click(object sender, RoutedEventArgs e)
+        {
+            string fullPath = App.CurrentGame.gameDirectory;
 
-				if (sammKey != null)
-				{
-					var pathManagerKey = sammKey.OpenSubKey("DefaultIcon");
-					if (pathManagerKey != null)
-					{
-						var managerPath = pathManagerKey.GetValue("").ToString();
+            if (Directory.Exists(fullPath))
+                Process.Start(new ProcessStartInfo { FileName = fullPath, UseShellExecute = true });
+        }
 
-						if (managerPath.ToLower().Contains(Environment.ProcessPath.ToLower()))
-						{
-							Image iconConfig = FindName("GB") as Image;
-							UIHelper.ToggleImage(ref menuIconConfig, false);
-							UIHelper.ToggleButton(ref btnOneClick, false);
-						}
+        private void UpdateBtnInstallLoader_State()
+        {
+            if (btnInstallLoader is null)
+                return;
 
-						pathManagerKey.Close();
-						sammKey.Close();
-					}
-				}
-			}
-			catch { }
-		}
+            //Update Text Button of Mod Loader Installer
+            string textKey = App.CurrentGame.loader.installed ? "Manager.Tabs.ManagerConfig.Group.Options.Buttons.UninstallLoader" : "Manager.Tabs.ManagerConfig.Group.Options.Buttons.InstallLoader";
+            TextBlock txt = FindName("txtInstallLoader") as TextBlock;
+            txt.Text = Lang.GetString(textKey);
 
-		private void UpdateBtnInstallLoader_State()
-		{
-			if (btnInstallLoader is null)
-				return;
+            //update icon image depending if the Mod Loader is installed or not
+            string iconName = App.CurrentGame.loader.installed ? "IconUninstall" : "IconInstall";
+            var dic = App.CurrentGame.loader.installed ? Icons.Icons.UninstallIcon : Icons.Icons.InstallIcon;
 
-			//Update Text Button of Mod Loader Installer
-			string textKey = App.CurrentGame.loader.installed ? "Manager.Tabs.ManagerConfig.Group.Options.Buttons.UninstallLoader" : "Manager.Tabs.ManagerConfig.Group.Options.Buttons.InstallLoader";
-			TextBlock txt = FindName("txtInstallLoader") as TextBlock;
-			txt.Text = Lang.GetString(textKey);
+            DrawingImage Icon = dic[iconName] as DrawingImage;
 
-			//update icon image depending if the Mod Loader is installed or not
-			string iconName = App.CurrentGame.loader.installed ? "IconUninstall" : "IconInstall";
-			var dic = App.CurrentGame.loader.installed ? Icons.Icons.UninstallIcon : Icons.Icons.InstallIcon;
+            Image imgInstall = FindName("imgInstall") as Image;
 
-			DrawingImage Icon = dic[iconName] as DrawingImage;
+            if (imgInstall is not null)
+                imgInstall.Source = Icon;
+        }
 
-			Image imgInstall = FindName("imgInstall") as Image;
-
-			if (imgInstall is not null)
-				imgInstall.Source = Icon;
-		}
-
-		private async Task UpdateGameConfig(SetGame game)
-		{
-			Directory.CreateDirectory(App.CurrentGame.ProfilesDirectory);
-			setGame = game; //TO DO get current game somehow
-			LoadGameProfile();
-			LoadGameConfigFile();
-			SetGameUI();
+        private async Task<bool> UpdateGameConfig(SetGame game)
+        {
+            setGame = game; //TO DO get current game somehow
+            Directory.CreateDirectory(App.CurrentGame.ProfilesDirectory);
+            LoadGameConfigFile();
+            SetGameUI();
             SetBindings();
             await Task.Delay(0);
-		}
+            return true;
+        }
 
-		private void SetProfileInComboBox()
-		{
-			GameProfiles.Clear();
+        private void UpdateDLLData()
+        {
+            if (File.Exists(App.CurrentGame.loader.loaderdllpath) && File.Exists(App.CurrentGame.loader.dataDllOriginPath))
+            {
+                File.Copy(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, true);
+            }
+        }
 
-			GameProfiles.Add("Default", Path.Combine(App.CurrentGame.ProfilesDirectory, "default.ini"));
-			foreach (var item in Directory.EnumerateFiles(App.CurrentGame.ProfilesDirectory, "*.ini"))
-				if (!item.EndsWith("default.ini", StringComparison.OrdinalIgnoreCase))
-					GameProfiles.Add(Path.GetFileNameWithoutExtension(item), item);
+        private async Task InstallLoader()
+        {
 
-			comboProfile.ItemsSource = GameProfiles;
-			comboProfile.DisplayMemberPath = "Key";
-		}
+            //if user requested to uninstall the loader...
+            if (App.CurrentGame.loader.installed && File.Exists(App.CurrentGame.loader.dataDllOriginPath))
+            {
+                UIHelper.DisableButton(ref SaveAndPlayButton);
+                UpdateManagerStatusText(Lang.GetString("UpdateStatus.UninstallLoader"));
+    
+                File.Delete(App.CurrentGame.loader.dataDllPath);
+                await Util.MoveFile(App.CurrentGame.loader.dataDllOriginPath, App.CurrentGame.loader.dataDllPath);
+                UpdateManagerStatusText(Lang.GetString("UpdateStatus.LoaderUninstalled"));
+                UIHelper.EnableButton(ref SaveAndPlayButton);
+            }
+            else //if user asked to install the loader
+            {
+                if (!File.Exists(App.CurrentGame.loader.dataDllOriginPath))
+                {
+                    UpdateManagerStatusText(Lang.GetString("UpdateStatus.InstallLoader"));
+                    UIHelper.DisableButton(ref SaveAndPlayButton);
 
-		private void UpdateDLLData()
-		{
-			if (File.Exists(App.CurrentGame.loader.loaderdllpath) && File.Exists(App.CurrentGame.loader.dataDllOriginPath))
-			{
-				File.Copy(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, true);
-			}
-		}
+                    await GamesInstall.InstallDLL_Loader(App.CurrentGame); //first, we download and extract the loader DLL in the mods folder
+                    await GamesInstall.CheckAndInstallDependencies(App.CurrentGame); //we check if some libraries are missing (BASS, D3D9...)
 
-		private async Task InstallLoader(bool force = false)
-		{
+                    UpdateManagerStatusText(Lang.GetString("UpdateStatus.InstallLoader"));
+                    //now we can move the loader files to the accurate folders.
+                    await Util.MoveFileAsync(App.CurrentGame.loader.dataDllPath, App.CurrentGame.loader.dataDllOriginPath, false);
+                    await Util.CopyFileAsync(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, false);
+                    await UpdateGameConfig(SetGame.SADX); //To do change with "current selected game" when it's available
+                    await EnableOneClickInstall();
+                    UIHelper.EnableButton(ref SaveAndPlayButton);
 
-			if (force)
-				App.CurrentGame.loader.installed = false;
 
-			if (!File.Exists(App.CurrentGame.loader.loaderdllpath))
-			{
-				await GamesInstall.InstallLoader(App.CurrentGame);
-
-				if (File.Exists(App.CurrentGame.loader.dataDllOriginPath) && App.CurrentGame.loader.installed)
-				{
-					File.Copy(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, true);
-					UpdateBtnInstallLoader_State();
-					return;
-				}
-			}
-
-			SaveAndPlayButton.IsEnabled = false;
-			// btnTSLaunch.IsEnabled = false;
-
-			if (App.CurrentGame.loader.installed && File.Exists(App.CurrentGame.loader.dataDllOriginPath))
-			{
-				File.Delete(App.CurrentGame.loader.dataDllPath);
-				await Util.MoveFile(App.CurrentGame.loader.dataDllOriginPath, App.CurrentGame.loader.dataDllPath);
-			}
-			else
-			{
-				if (!File.Exists(App.CurrentGame.loader.dataDllOriginPath))
-				{
-					File.Move(App.CurrentGame.loader.dataDllPath, App.CurrentGame.loader.dataDllOriginPath);
-					await Util.CopyFileAsync(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, false);
-				}
-			}
-
-			await VanillaTransition.HandleVanillaManagerFiles(App.CurrentGame.loader.installed, App.CurrentGame.gameDirectory);
-			App.CurrentGame.loader.installed = !App.CurrentGame.loader.installed;
-			UpdateBtnInstallLoader_State();
-		}
-
-		private async void SetGamePath()
-		{
-			string path = string.Empty;
-			switch (setGame)
-			{
-				case SetGame.SADX:
-					path = (GameProfile as IniSettings.SADX.GameSettings).GamePath;
-					break;
-				case SetGame.SA2:
-					//path = (GameProfile as IniSettings.SA2.GameSettings).GamePath;
-					break;
-			}
-			if (Directory.Exists(path))
-			{
-				App.CurrentGame.gameDirectory = path;
-			}
-			else
-			{
-				if (File.Exists(App.CurrentGame.exeName)) //if current game path is wrong, check if the Mod Manager didn't get put in the game folder just in case.
-				{
-					App.CurrentGame.gameDirectory = Directory.GetCurrentDirectory();
-				}
-				else
-				{
-					//if none of the conditions are respected, try to look for sadx folder
-					var fullPath = await Util.GetSADXGamePath();
-					if (fullPath is not null)
-					{
-						App.CurrentGame.gameDirectory = fullPath;
-					}
-				}
-			}
-		}
-
-		private async Task SetLoaderFile()
-		{
-			if (!File.Exists(App.CurrentGame.loader.loaderdllpath))
-			{
-				if (File.Exists("SADXModLoader.dll"))
-				{
-					await Util.MoveFile("SADXModLoader.dll", App.CurrentGame.loader.loaderdllpath);
-				}
-				else
-				{
-					await GamesInstall.InstallLoader(App.CurrentGame);
-				}
-			}
-		}
-
-		private string GetSelectedProfile()
-		{
-			if (comboProfile.SelectedIndex > -1 && comboProfile.Items.Count > 0)
-			{
-                return GameProfiles.Values.ToList()[comboProfile.SelectedIndex];
+                    UpdateManagerStatusText(Lang.GetString("UpdateStatus.LoaderInstalled"));
+                }
             }
 
-			return Path.Combine(App.CurrentGame.ProfilesDirectory, "Default.ini");    
-		}
-		#endregion
-		#endregion
-	}
+            //todo, delete when official release
+            await VanillaTransition.HandleVanillaManagerFiles(App.CurrentGame.loader.installed, App.CurrentGame.gameDirectory);
+
+            App.CurrentGame.loader.installed = !App.CurrentGame.loader.installed;
+            UpdateBtnInstallLoader_State();
+        }
+        #endregion
+
+        #endregion
+    }
 }

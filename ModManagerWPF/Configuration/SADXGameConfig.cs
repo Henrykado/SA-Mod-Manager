@@ -1,9 +1,14 @@
 ﻿using SAModManager.Ini;
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
-namespace SAModManager.GameConfigs
+namespace SAModManager.Configuration
 {
-	enum FrameRate
+	enum SADXFrameRate
 	{
 		Invalid,
 		High,
@@ -30,12 +35,12 @@ namespace SAModManager.GameConfigs
 		public int ClipLevel { get; set; } = 0;
 		[IniAlwaysInclude]
 		[IniName("sevoice")]
-        [DefaultValue(1)]
-        public int SEVoice { get; set; } = 1;
+		[DefaultValue(1)]
+		public int SEVoice { get; set; } = 1;
 		[IniAlwaysInclude]
 		[IniName("bgm")]
-        [DefaultValue(1)]
-        public int BGM { get; set; } = 1;
+		[DefaultValue(1)]
+		public int BGM { get; set; } = 1;
 		[IniAlwaysInclude]
 		[IniName("screen")]
 		public int FullScreen { get; set; } = 0;
@@ -48,8 +53,8 @@ namespace SAModManager.GameConfigs
 		public int BGMVolume { get; set; } = 100;
 		[IniAlwaysInclude]
 		[IniName("voicev")]
-        [DefaultValue(100)]
-        public int VoiceVolume { get; set; } = 100;
+		[DefaultValue(100)]
+		public int VoiceVolume { get; set; } = 100;
 		[IniName("language")]
 		public int Language { get; set; }
 		[IniName("padconfig")]

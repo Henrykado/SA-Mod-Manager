@@ -2,6 +2,10 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                      xmlns:system="clr-namespace:System;assembly=mscorlib">
 
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="MainWindow/UpdateStatus/fr-FR.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
     <!--Region Common UI-->
     <system:String x:Key="CommonStrings.OK">OK</system:String>
     <system:String x:Key="CommonStrings.Cancel">Annuler</system:String>
@@ -174,6 +178,7 @@
 
     <system:String x:Key="Manager.Tabs.ManagerConfig.Group.Options.Buttons.InstallLoader">Installer Loader</system:String>
     <system:String x:Key="Manager.Tabs.ManagerConfig.Group.Options.Buttons.UninstallLoader">Désinstaller Mod Loader</system:String>
+    <system:String x:Key="Manager.Tabs.ManagerConfig.Group.Options.Buttons.GameDir">Ouvrir le répertoire du Jeu</system:String>
 
     <system:String x:Key="Manager.Tabs.ManagerConfig.Group.Options.Group.Updates.Group.Advanced.Check.KeepOpen">Laisser le Mod Manager Ouvert après démarrage du jeu</system:String>
     <system:String x:Key="ManagerCheckTestSpawn">Activer l'onglet Test Spawn</system:String>

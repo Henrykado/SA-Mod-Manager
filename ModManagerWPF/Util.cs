@@ -21,8 +21,6 @@ namespace SAModManager
 {
 	class Util
 	{
-		private static double multiplier;
-
         public static async Task<bool> MoveFileAsync(string sourceFile, string destinationFile, bool overwrite)
 		{
 			try
@@ -55,10 +53,11 @@ namespace SAModManager
 		{
 			try
 			{
-				IniSettings.SADX.GameSettings newProfile = new();
+				// TODO: Add switch case to properly do the new config for either game.
+				Configuration.SADX.GameSettings newProfile = new();
 				newProfile.ConvertFromV0(IniSerializer.Deserialize<SADXLoaderInfo>(sourceFile));
-				IniSerializer.Serialize(newProfile, destinationFile);
-				return true;
+				await Task.Run(() => newProfile.Serialize(destinationFile));
+                return true;
 			}
 			catch (Exception ex)
 			{
@@ -142,27 +141,6 @@ namespace SAModManager
 				string destinationSubDir = Path.Combine(dest, subDir.Name);
 				CopyFolder(subDir.FullName, destinationSubDir);
 			}
-		}
-
-		public static string GetSaveNumber(string s)
-		{
-			string number = s[^2..];
-
-			if (int.TryParse(number, out int result))
-			{
-				// The last two characters are numbers
-				if (number[0] == '0')
-				{
-					number = number.Substring(1);
-				}
-			}
-
-			return number;
-		}
-
-		public static void SetTaskCount(int count, double max)
-		{
-			multiplier = max / (double)count;
 		}
 
 		public static double SetProgress(double value)

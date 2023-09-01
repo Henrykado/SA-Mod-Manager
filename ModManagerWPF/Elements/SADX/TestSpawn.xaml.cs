@@ -728,13 +728,13 @@ namespace SAModManager.Elements.SADX
 		{
 			List<string> cmdline = new List<string>();
 
-			if (GameProfile.TestSpawn.CharacterIndex > -1)
+			if (GameProfile.TestSpawn.CharacterIndex > -1 && tsCheckCharacter.IsChecked == true)
 				cmdline.Add("-c " + GameProfile.TestSpawn.CharacterIndex.ToString());
 
-			if (GameProfile.TestSpawn.LevelIndex > -1)
+			if (GameProfile.TestSpawn.LevelIndex > -1 && IsLevelChecked)
 				cmdline.Add("-l " + GameProfile.TestSpawn.LevelIndex.ToString());
 
-			if (GameProfile.TestSpawn.ActIndex > -1)
+			if (GameProfile.TestSpawn.ActIndex > -1 && IsLevelChecked)
 				cmdline.Add("-a " + GameProfile.TestSpawn.ActIndex.ToString());
 
 			if (GameProfile.TestSpawn.UsePosition)
@@ -767,9 +767,9 @@ namespace SAModManager.Elements.SADX
 		#region Public Functions
 		public void Save()
 		{
-			if (!IsCharacterChecked)
+			if (!IsCharacterChecked && tsNumCharacter.Value < 0)
 				tsComboCharacter.SelectedIndex = -1;
-			if (!IsLevelChecked)
+			if (!IsLevelChecked && tsNumLevel.Value < 0)
 			{
 				tsComboLevel.SelectedIndex = -1;
 				tsComboAct.SelectedIndex = -1;

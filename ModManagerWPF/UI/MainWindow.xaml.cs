@@ -67,8 +67,8 @@ namespace SAModManager
 
         // TODO: Make this generic for handling both games. Maybe do it with a custom class for easier management.
         public Dictionary<string, SADXModInfo> mods = null;
-        private List<string> EnabledMods = new();
-        private List<string> EnabledCodes = new();
+        public List<string> EnabledMods = new();
+        public List<string> EnabledCodes = new();
         #endregion
 
         public MainWindow()
@@ -810,6 +810,7 @@ namespace SAModManager
                         {
                             ModsFind.Visibility = Visibility.Collapsed;
                             FilterMods("");
+                            TextBox_ModsSearch.Text = "";
                         }
                         else
                         {
@@ -825,6 +826,7 @@ namespace SAModManager
                         {
                             CodesFind.Visibility = Visibility.Collapsed;
                             FilterCodes("");
+                            TextBox_CodesSearch.Text = "";
                         }
                         else
                         {
@@ -1036,8 +1038,6 @@ namespace SAModManager
             Save();
         }
 
-        // TODO: Both of these now point to the Manager's Repo, but we could make options to open/report Loader related issues.
-        // Something to discuss.
         private void btnSource_Click(object sender, RoutedEventArgs e)
         {
             var ps = new ProcessStartInfo("https://github.com/X-Hax/sa-mod-manager")
@@ -1090,6 +1090,8 @@ namespace SAModManager
 
 			int index = comboProfile.SelectedIndex;
 			ProfileDialog dialog = new ProfileDialog(ref GameProfiles, index);
+			UpdateModsCodes();
+			dialog.Owner = this;
 			dialog.ShowDialog();
 
             // Save the Profiles file.
@@ -1106,6 +1108,9 @@ namespace SAModManager
 
         private void comboProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+			if (suppressEvent)
+				return;
+
             var selectedItem = comboProfile.SelectedItem;
 
             if (selectedItem != null)
@@ -1153,8 +1158,7 @@ namespace SAModManager
 			{
 				tabGame.Visibility = Visibility.Visible;
 				comboProfile.IsEnabled = true;
-				grpManAdvanced.IsEnabled = true;
-				grpManUpdates.IsEnabled = true;
+				grpManagerSettings.IsEnabled = true;
 				btnInstallLoader.IsEnabled = true;
 				RefreshBtn.IsEnabled = true;
 				btnSelectAll.IsEnabled = true;
@@ -1169,8 +1173,7 @@ namespace SAModManager
 			{
 				tabGame.Visibility = Visibility.Collapsed;
 				comboProfile.IsEnabled = false;
-				grpManAdvanced.IsEnabled = false;
-				grpManUpdates.IsEnabled = false;
+				grpManagerSettings.IsEnabled = false;
 				btnInstallLoader.IsEnabled = false;
 				RefreshBtn.IsEnabled = false;
 				btnSelectAll.IsEnabled = false;
@@ -1256,9 +1259,24 @@ namespace SAModManager
             return GameProfiles.ProfilesList[index].Filename;
         }
 
-        #region Private: Load & Save
+		private void UpdateModsCodes()
+		{
+			// Update EnabledMods for saving.
+			EnabledMods.Clear();
+			foreach (ModData mod in ViewModel.Modsdata)
+				if (mod?.IsChecked == true)
+					EnabledMods.Add(mod.Tag);
 
-        private void LoadGameConfigFile()
+			// Update EnabledCodes for saving.
+			EnabledCodes.Clear();
+			foreach (CodeData code in CodeListView.Items)
+				if (code?.IsChecked == true)
+					EnabledCodes.Add(code.codes.Name);
+		}
+
+		#region Private: Load & Save
+
+		private void LoadGameConfigFile()
         {
             // TODO: Properly update this for loading SA2's config file.
             List<string> gameConfig = new();
@@ -1419,6 +1437,9 @@ namespace SAModManager
 				GameProfiles = File.Exists(profiles) ? Profiles.Deserialize(profiles) : Profiles.MakeDefaultProfileFile();
 				comboProfile.ItemsSource = GameProfiles.ProfilesList;
 				comboProfile.DisplayMemberPath = "Name";
+				suppressEvent = true;
+				comboProfile.SelectedIndex = GameProfiles.ProfileIndex;
+				suppressEvent = false;
 
 				// Set the existing profiles to the ones from the loaded Manager Settings.
 				LoadGameSettings(newSetup);
@@ -1452,17 +1473,8 @@ namespace SAModManager
 			App.ManagerSettings.CurrentSetGame = (int)setGame;
             App.ManagerSettings.Serialize(App.ManagerConfigFile);
 
-			// Update EnabledMods for saving.
-			EnabledMods.Clear();
-			foreach (ModData mod in ViewModel.Modsdata)
-				if (mod?.IsChecked == true)
-					EnabledMods.Add(mod.Tag);
-
-			// Update EnabledCodes for saving.
-			EnabledCodes.Clear();
-			foreach (CodeData code in CodeListView.Items)
-				if (code?.IsChecked == true)
-					EnabledCodes.Add(code.codes.Name);
+			// Save Mods and Codes
+			UpdateModsCodes();
 
 			// Build the Code Files.
 			BuildCodeFiles();
@@ -2175,14 +2187,14 @@ namespace SAModManager
                 }
             }
 
-            //todo, delete when official release
+            //TODO: delete when official release
             await VanillaTransition.HandleVanillaManagerFiles(App.CurrentGame.loader.installed, App.CurrentGame.gameDirectory);
 
             App.CurrentGame.loader.installed = !App.CurrentGame.loader.installed;
             UpdateBtnInstallLoader_State();
         }
-        #endregion
+		#endregion
 
-        #endregion
-    }
+		#endregion
+	}
 }

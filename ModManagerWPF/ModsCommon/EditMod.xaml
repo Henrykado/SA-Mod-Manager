@@ -208,11 +208,10 @@
 							<ColumnDefinition Width="*"/>
 							<ColumnDefinition Width="*"/>
 						</Grid.ColumnDefinitions>
-						<ListView Grid.Column="0" Margin="5">
-							
-						</ListView>
+                        <TextBlock x:Name="CodeName" Margin="5,5,5,5" FontSize="15"/>
 
-						<Grid Grid.Column="1">
+
+                        <Grid Grid.Column="1">
 							<Grid.RowDefinitions>
 								<RowDefinition Height="5"/>
 								<RowDefinition Height="30"/>

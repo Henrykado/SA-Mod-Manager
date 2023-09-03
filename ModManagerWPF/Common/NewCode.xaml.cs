@@ -14,11 +14,11 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 using ICSharpCode.AvalonEdit.Highlighting.Xshd;
 using System.CodeDom;
 using ICSharpCode.AvalonEdit;
 using SAModManager.Elements;
+using static System.Windows.Forms.LinkLabel;
 
 namespace SAModManager.Common
 {
@@ -28,19 +28,14 @@ namespace SAModManager.Common
     public partial class NewCode : Window
     {
 		private string CodesPath = string.Empty;
-		public Code Code = new();
 
 		/// <summary>
 		/// Initialize NewCode Window. Constructor can take a path to store for saving mods to the correct location.
 		/// </summary>
-        public NewCode(string codepath = "", string codefile = "codes.lst", Code code = null)
+        public NewCode(string codepath = "", string codefile = "codes.lst")
         {
             InitializeComponent();
-			CodesPath = codepath + codefile;
-
-			if (code != null)
-				Code = code;
-
+			CodesPath = Path.Combine(codepath, codefile);
 			using (XmlTextReader reader = new XmlTextReader(new StringReader(Properties.Resources.OpCodeSyntaxDark)))
 			{
 				CodeWriter.SyntaxHighlighting = HighlightingLoader.Load(reader, HighlightingManager.Instance);
@@ -54,25 +49,24 @@ namespace SAModManager.Common
 			SetBindings();
 		}
 
-		private void SetCodeWriterText(List<CodeLine> codeLines)
-		{
-			StringBuilder sb = new StringBuilder();
-			foreach (CodeLine line in codeLines)
-			{
-				sb.AppendLine(line.ToString());
-			}
 
-			CodeWriter.Text = sb.ToString();
+        private void SetCodeWriterText()
+		{
+			if (File.Exists(CodesPath))
+			{
+				CodeWriter.Text += File.ReadAllText(CodesPath);
+            }		
 		}
 
 		private void SaveCodeWriterLines()
 		{
-			
-		}
+			if (!string.IsNullOrWhiteSpace(CodeWriter.Text))
+				File.WriteAllText(CodesPath, CodeWriter.Text);
+        }
 
 		private void SetBindings()
 		{
-			CodeName.SetBinding(TextBox.TextProperty, new Binding("Name")
+			/*CodeName.SetBinding(TextBox.TextProperty, new Binding("Name")
 			{
 				Source = Code,
 			});
@@ -92,13 +86,14 @@ namespace SAModManager.Common
 			{
 				Source = radPatch,
 				Converter = new BoolFlipConverter()
-			});
-			SetCodeWriterText(Code.Lines);
+			});*/
+			SetCodeWriterText();
 		}
 
 		private bool SaveCodeToFile()
 		{
-			return true;
+			SaveCodeWriterLines();
+            return true;
 		}
 
 		#region Window Functions

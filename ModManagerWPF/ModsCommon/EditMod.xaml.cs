@@ -31,6 +31,7 @@ namespace SAModManager
 
 		#region Variables
 		static bool editMod { get; set; } = false;
+		private string folderName;
 		public static SADXModInfo Mod { get; set; }
 		static string CurrentTime = string.Empty;
 
@@ -48,7 +49,7 @@ namespace SAModManager
 		#endregion
 
 		#region Initializer
-		public EditMod(SADXModInfo mod)
+		public EditMod(SADXModInfo mod, string tag)
 		{
 			InitializeComponent();
 
@@ -58,7 +59,6 @@ namespace SAModManager
 			AddColon(modCategory);
 
 			editMod = mod is not null;
-			CurrentTime = ((uint)DateTime.Now.GetHashCode()).ToString();
 
 			if (editMod)
 			{
@@ -78,10 +78,11 @@ namespace SAModManager
 				sourceURLBox.Text = mod.SourceCode;
 				mainSaveBox.IsChecked = mod.RedirectMainSave;
 				chaoSaveBox.IsChecked = mod.RedirectChaoSave;
-
-				LoadModUpdates(mod);
+                folderName = tag;
+                LoadModUpdates(mod);
 				LoadDependencies(mod);
-				LoadConfigSchema(mod.Name);
+				LoadCodes(mod);
+                LoadConfigSchema(mod.Name);
 
 				openFolderChk.IsChecked = false;
 			}
@@ -91,7 +92,9 @@ namespace SAModManager
 				authorBox.Text = App.ManagerSettings.ModAuthor;
 				versionBox.Text = "0.1";
 				bottomGrid.Children.Remove(checkAdvancedOptions);
-			}
+				tabCodes.IsEnabled = false;
+				tabCodes.Visibility = Visibility.Collapsed;
+            }
 
 			DataContext = new SADXModInfo();
 
@@ -355,6 +358,22 @@ namespace SAModManager
 			}
 		}
 
+		private void LoadCodes(SADXModInfo mod)
+		{
+			CodeName.Text = "";
+
+			if (mod.Codes is null)
+				return;
+
+            string fullPath = Path.Combine(Path.Combine(App.CurrentGame.modDirectory, folderName), mod.Codes);
+            //if a mod has a code, add it to the list
+            if (File.Exists(fullPath))
+            {
+				btnNewCode.IsEnabled = false;
+                CodeName.Text = Path.GetFileName(fullPath);  
+            }
+
+        }
 		private void LoadDependencies(SADXModInfo mod)
 		{
 			dependencies.Clear();
@@ -383,7 +402,19 @@ namespace SAModManager
 			newMod.ModID = GetStringContent(modIDBox.Text);
 			newMod.DLLFile = GetStringContent(dllText.Text);
 
-			SaveModUpdates(newMod);
+			string codeName = "Codes.lst";
+
+			if (Mod is not null && Mod.Codes is not null)
+				codeName = Mod.Codes;
+
+            string codePath = Path.Combine(moddir, codeName);
+
+            if (File.Exists(codePath))
+                newMod.Codes = Path.GetFileName(codePath);
+			else
+				newMod.Codes = null;
+
+            SaveModUpdates(newMod);
 			SaveModDependencies(newMod);
 
 			var modIniPath = Path.Combine(moddir, "mod.ini");
@@ -484,7 +515,7 @@ namespace SAModManager
 
 		string GenerateModID()
 		{
-			return "sadx." + nameBox.Text + "." + CurrentTime;
+			return "sadx." + nameBox.Text;
 		}
 
 		static string ValidateFilename(string filename)
@@ -575,31 +606,52 @@ namespace SAModManager
 			}
 		}
 
-		private Dictionary<int, Code> GetSelectedCodes()
-		{
-			Dictionary<int, Code> codeListEntry = new();
-
-			return codeListEntry;
-		}
-
 		private void btnNewCode_Click(object sender, RoutedEventArgs e)
 		{
-			NewCode newCodeWindow = new NewCode();
-			newCodeWindow.ShowDialog();
+            string path = Path.Combine(App.CurrentGame.modDirectory, folderName);
+			string fullPath = Path.Combine(path, "Codes.lst");
+
+            if (!File.Exists(fullPath))
+			{
+				NewCode newCodeWindow = new(path);
+                newCodeWindow.ShowDialog();
+
+                if (File.Exists(fullPath))
+                {
+                    CodeName.Text = Path.GetFileName(fullPath);
+                }
+            }
 		}
 
 		private void btnDelCode_Click(object sender, RoutedEventArgs e)
 		{
+			if (Mod is null || Mod.Codes is null)
+				return;
 
-		}
+            string path = Path.Combine(App.CurrentGame.modDirectory, folderName, Mod.Codes);
+
+            if (File.Exists(path))
+			{
+				var error = new MessageWindow(Lang.GetString("CommonStrings.Warning"), Lang.GetString("MessageWindow.Warnings.NewCodeDelete"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Warning, MessageWindow.Buttons.YesNo);
+				error.ShowDialog();
+
+				if (error.isYes == true)
+				{
+                    File.Delete(path);
+					CodeName.Text = "";
+                }
+					
+			}
+        }
 
 		private void btnEditCode_Click(object sender, RoutedEventArgs e)
 		{
-			Code editCode = GetSelectedCodes().FirstOrDefault().Value;
-			if (editCode is null)
+			if (string.IsNullOrEmpty(CodeName.Text) || Mod is null)
 				return;
 
-			NewCode codeWindow = new NewCode(code: editCode);
+			string path = Path.Combine(App.CurrentGame.modDirectory, folderName);
+
+            NewCode codeWindow = new(path, CodeName.Text);
 			codeWindow.ShowDialog();
 		}
 	}

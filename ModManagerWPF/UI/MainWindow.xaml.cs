@@ -999,7 +999,7 @@ namespace SAModManager
                 }
                 else
                 {
-                    await InstallLoader();
+                    await HandleLoaderInstall();
                     Save();
                 }
             }
@@ -1035,7 +1035,7 @@ namespace SAModManager
             }
 
             btnBrowseGameDir.IsEnabled = false;
-            await InstallLoader();
+            await HandleLoaderInstall();
             UpdateButtonsState();
             btnBrowseGameDir.IsEnabled = true;
             Save();
@@ -1402,7 +1402,6 @@ namespace SAModManager
             Elements.SADX.GameConfig gameConfig = (Elements.SADX.GameConfig)(tabGame.Content as Grid).Children[0];
             gameConfig.SavePatches(ref GameProfile);
             Elements.SADX.TestSpawn spawnConfig = (Elements.SADX.TestSpawn)(tabTestSpawn.Content as Grid).Children[0];
-            spawnConfig.Save();
 
             Configuration.SADX.GameSettings sadxSettings = GameProfile as Configuration.SADX.GameSettings;
 
@@ -1852,10 +1851,8 @@ namespace SAModManager
 
             }
 
-
             new Updater.ModDownloadDialogWPF(updates, updatePath).ShowDialog();
-
-
+            await Task.Delay(500);
             Refresh();
         }
 
@@ -2156,7 +2153,31 @@ namespace SAModManager
             }
         }
 
+
         private async Task InstallLoader()
+        {
+            if (!File.Exists(App.CurrentGame.loader.dataDllOriginPath))
+            {
+                UpdateManagerStatusText(Lang.GetString("UpdateStatus.InstallLoader"));
+                UIHelper.DisableButton(ref SaveAndPlayButton);
+
+                await GamesInstall.InstallDLL_Loader(App.CurrentGame); //first, we download and extract the loader DLL in the mods folder
+                await GamesInstall.CheckAndInstallDependencies(App.CurrentGame); //we check if some libraries are missing (BASS, D3D9...)
+
+                UpdateManagerStatusText(Lang.GetString("UpdateStatus.InstallLoader"));
+                //now we can move the loader files to the accurate folders.
+                await Util.MoveFileAsync(App.CurrentGame.loader.dataDllPath, App.CurrentGame.loader.dataDllOriginPath, false);
+                await Util.CopyFileAsync(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, false);
+                await UpdateGameConfig(SetGame.SADX); //To do change with "current selected game" when it's available
+                await EnableOneClickInstall();
+                UIHelper.EnableButton(ref SaveAndPlayButton);
+
+
+                UpdateManagerStatusText(Lang.GetString("UpdateStatus.LoaderInstalled"));
+            }
+        }
+
+        private async Task HandleLoaderInstall()
         {
 
             //if user requested to uninstall the loader...
@@ -2172,25 +2193,7 @@ namespace SAModManager
             }
             else //if user asked to install the loader
             {
-                if (!File.Exists(App.CurrentGame.loader.dataDllOriginPath))
-                {
-                    UpdateManagerStatusText(Lang.GetString("UpdateStatus.InstallLoader"));
-                    UIHelper.DisableButton(ref SaveAndPlayButton);
-
-                    await GamesInstall.InstallDLL_Loader(App.CurrentGame); //first, we download and extract the loader DLL in the mods folder
-                    await GamesInstall.CheckAndInstallDependencies(App.CurrentGame); //we check if some libraries are missing (BASS, D3D9...)
-
-                    UpdateManagerStatusText(Lang.GetString("UpdateStatus.InstallLoader"));
-                    //now we can move the loader files to the accurate folders.
-                    await Util.MoveFileAsync(App.CurrentGame.loader.dataDllPath, App.CurrentGame.loader.dataDllOriginPath, false);
-                    await Util.CopyFileAsync(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, false);
-                    await UpdateGameConfig(SetGame.SADX); //To do change with "current selected game" when it's available
-                    await EnableOneClickInstall();
-                    UIHelper.EnableButton(ref SaveAndPlayButton);
-
-
-                    UpdateManagerStatusText(Lang.GetString("UpdateStatus.LoaderInstalled"));
-                }
+                await InstallLoader();
             }
 
             //TODO: delete when official release

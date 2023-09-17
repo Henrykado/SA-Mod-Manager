@@ -13,6 +13,7 @@ using System.Windows.Input;
 using System.Windows.Controls.Primitives;
 using SAModManager.Configuration;
 using SAModManager.Configuration.SADX;
+using SAModManager.Ini;
 
 namespace SAModManager.Elements.SADX
 {
@@ -50,7 +51,13 @@ namespace SAModManager.Elements.SADX
 			SetupBindings();
 			SetUp_UpdateD3D9();
 			SetTextureFilterList();
-        }
+
+			InitMouseList();
+
+			mouseAction.SelectionChanged += mouseAction_SelectionChanged;
+			mouseBtnAssign.SelectionChanged += mouseBtnAssign_SelectionChanged;
+		}
+
 		//Temporary, TO DO: Implement proper texture filter list
 
 		private void SetTextureFilterSettings()
@@ -273,34 +280,31 @@ namespace SAModManager.Elements.SADX
 			mouseBtnAssign.ItemsSource = mouseBtnAssignList;
 		}
 
-
-		private void radVanillaInput_Checked(object sender, RoutedEventArgs e)
+		private void DisplayInputGroup(int type)
 		{
-			if (grpVanillaInput is null)
-				return;
-
-			int index = tabInputGrid.Children.IndexOf(grpSDLInput); //Graphic Window setting is a children of the graphic grid 
-
-			tabInputGrid.Children.RemoveAt(index); //we remove it so we can only display the full screen options
-
-			if (!tabInputGrid.Children.Contains(grpVanillaInput)) //if the fullscreen grid doesn't exist, add it back
+			switch (type)
 			{
-				tabInputGrid.Children.Add(grpVanillaInput);
+				default:
+					grpSDLInput.Visibility = Visibility.Visible;
+					grpVanillaInput.Visibility = Visibility.Collapsed;
+					break;
+				case 1:
+					grpSDLInput.Visibility = Visibility.Collapsed;
+					grpVanillaInput.Visibility = Visibility.Visible;
+					break;
 			}
 		}
 
-		private void radBetterInput_Checked(object sender, RoutedEventArgs e)
+		private void InputRadioButtonCheck(object sender, RoutedEventArgs e)
 		{
-			if (grpSDLInput is null)
+			if (grpVanillaInput is null || grpSDLInput is null)
 				return;
 
-			int index = tabInputGrid.Children.IndexOf(grpVanillaInput);
-			tabInputGrid.Children.RemoveAt(index);
+			if ((bool)radBetterInput.IsChecked)
+				DisplayInputGroup(0);
 
-			if (!tabInputGrid.Children.Contains(grpSDLInput))
-			{
-				tabInputGrid.Children.Add(grpSDLInput);
-			}
+			if ((bool)radVanillaInput.IsChecked)
+				DisplayInputGroup(1);
 		}
 
 		#region App Launcher
@@ -622,6 +626,51 @@ namespace SAModManager.Elements.SADX
 			settings.Patches.HRTFSound = patch.IsChecked;
 		}
 
+		private void SetItemFromPad(int action)
+		{
+			switch (action)
+			{
+				case 0:
+					mouseBtnAssign.SelectedIndex = GameSettings.GameConfig.MouseStart;
+					break;
+				case 1:
+					mouseBtnAssign.SelectedIndex = GameSettings.GameConfig.MouseAttack;
+					break;
+				case 2:
+					mouseBtnAssign.SelectedIndex = GameSettings.GameConfig.MouseJump;
+					break;
+				case 3:
+					mouseBtnAssign.SelectedIndex = GameSettings.GameConfig.MouseAction;
+					break;
+				case 4:
+					mouseBtnAssign.SelectedIndex = GameSettings.GameConfig.MouseFlute;
+					break;
+			}
+		}
+
+		private void SetItemToPad(int value)
+		{
+			int action = mouseAction.SelectedIndex;
+			switch (action)
+			{
+				case 0:
+					GameSettings.GameConfig.MouseStart = (ushort)value;
+					break;
+				case 1:
+					GameSettings.GameConfig.MouseAttack = (ushort)value;
+					break;
+				case 2:
+					GameSettings.GameConfig.MouseJump = (ushort)value;
+					break;
+				case 3:
+					GameSettings.GameConfig.MouseAction = (ushort)value;
+					break;
+				case 4:
+					GameSettings.GameConfig.MouseFlute = (ushort)value;
+					break;
+			}
+		}
+
 		#region Private Functions
 		private void SetupBindings()
 		{
@@ -843,5 +892,17 @@ namespace SAModManager.Elements.SADX
                 GameProfile.Graphics.EnableForcedTextureFilter = false;
             }
         }
-    }
+
+		private void mouseAction_SelectionChanged(object sender, SelectionChangedEventArgs e)
+		{
+			ComboBox comboBox = sender as ComboBox;
+			SetItemFromPad(comboBox.SelectedIndex);
+		}
+
+		private void mouseBtnAssign_SelectionChanged(object sender, SelectionChangedEventArgs e)
+		{
+			ComboBox comboBox = sender as ComboBox;
+			SetItemToPad(comboBox.SelectedIndex);
+		}
+	}
 }

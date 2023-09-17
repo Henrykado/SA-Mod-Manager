@@ -76,16 +76,11 @@ namespace SAModManager
                 return;
             }
 
-
             SetupLanguages();
             SetupThemes();
 
             ManagerSettings = LoadManagerConfig();
-            if (await ExecuteDependenciesCheck() == false)
-            {
-                return;
-            }
-
+            await ExecuteDependenciesCheck();
 
             await InitUriAsync(args, alreadyRunning);
 
@@ -243,7 +238,16 @@ namespace SAModManager
 
                 if (artifacts != null)
                 {
-                    info = artifacts.FirstOrDefault(t => t.Expired == false && t.Name.Contains("Release"));
+                    bool is64BitSystem = Environment.Is64BitOperatingSystem;
+                    string targetArchitecture = is64BitSystem ? "x64" : "x86";
+
+                    info = artifacts.FirstOrDefault(t => t.Expired == false && t.Name.Contains("Release-" + targetArchitecture));
+
+                    // If there's no specific architecture match, try to get a generic "Release" artifact
+                    if (info == null)
+                    {
+                        info = artifacts.FirstOrDefault(t => t.Expired == false && t.Name.Contains("Release"));
+                    }
                 }
             }
 
@@ -332,6 +336,7 @@ namespace SAModManager
             {
                 File.WriteAllText(App.CurrentGame.loader.loaderVersionpath, update.Item2);
                 await GamesInstall.UpdateCodes(App.CurrentGame); //update codes
+                await GamesInstall.UpdateDependencies(App.CurrentGame);
 
                 return true;
             }

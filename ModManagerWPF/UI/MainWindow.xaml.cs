@@ -27,8 +27,7 @@ using SAModManager.Configuration;
 using ICSharpCode.AvalonEdit.Editing;
 using SAModManager.IniSettings.SA2;
 using System.Reflection;
-using System.Windows.Media.Animation;
-using NetCoreInstallChecker.Structs;
+
 
 namespace SAModManager
 {
@@ -614,10 +613,13 @@ namespace SAModManager
                 }
 
 
-                await ExecuteModsUpdateCheck();
-                await UpdateChecker_DoWorkForced();
-                modUpdater.ForceUpdate = true;
                 UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
+                await UpdateChecker_DoWork();
+                modUpdater.ForceUpdate = true;
+                await UpdateChecker_DoWorkForced();
+                modUpdater.ForceUpdate = false;
+                await UpdateChecker_RunWorkerCompleted();
+                UpdateChecker_EnableControls();
             }
 
         }
@@ -999,7 +1001,8 @@ namespace SAModManager
                 }
                 else
                 {
-                    await HandleLoaderInstall();
+                    await ForceInstallLoader();
+                    UpdateButtonsState();
                     Save();
                 }
             }
@@ -1343,7 +1346,7 @@ namespace SAModManager
                     }
                 }
             }
-        
+
             CodeList.WriteDatFile(patchdatpath, selectedPatches);
             CodeList.WriteDatFile(codedatpath, selectedCodes);
         }
@@ -1352,6 +1355,7 @@ namespace SAModManager
         {
             bool installed = App.CurrentGame != null ? App.CurrentGame.loader.installed : false;
             UIHelper.ToggleImgButton(ref btnCheckUpdates, installed);
+            UIHelper.ToggleImgButton(ref btnHealthCheck, installed);
             UpdateBtnInstallLoader_State();
             Update_PlayButtonsState();
         }
@@ -1427,6 +1431,19 @@ namespace SAModManager
             // TODO: Nothing to do, it's not implemented yet.
         }
 
+        private void ManualLoaderUpdateCheck()
+        {
+            if (File.Exists(App.CurrentGame.loader.dataDllOriginPath))
+            {
+                byte[] hash1 = MD5.HashData(File.ReadAllBytes(App.CurrentGame.loader.loaderdllpath));
+                byte[] hash2 = MD5.HashData(File.ReadAllBytes(App.CurrentGame.loader.dataDllPath));
+
+                if (!hash1.SequenceEqual(hash2))
+                {
+                    File.Copy(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, true);
+                }
+            }
+        }
         public async void Load(bool newSetup = false)
         {
             if (setGame != SetGame.None)
@@ -1444,13 +1461,14 @@ namespace SAModManager
                 LoadGameSettings(newSetup);
 
                 await UpdateManagerInfo();
-
+                ManualLoaderUpdateCheck();
                 InitCodes();
                 LoadModList();
 
             }
             else
             {
+                UpdateButtonsState();
                 UIHelper.ToggleButton(ref btnOpenGameDir, false);
             }
 
@@ -1796,7 +1814,7 @@ namespace SAModManager
 
                 foreach (var error in Errors)
                 {
-                    msgError += "\n\n" + error;
+                    msgError += "\n" + error;
                 }
 
                 if (msgError.Contains("403"))
@@ -2172,9 +2190,39 @@ namespace SAModManager
                 await EnableOneClickInstall();
                 UIHelper.EnableButton(ref SaveAndPlayButton);
 
-
                 UpdateManagerStatusText(Lang.GetString("UpdateStatus.LoaderInstalled"));
             }
+        }
+
+        private async Task ForceInstallLoader()
+        {
+            UpdateManagerStatusText(Lang.GetString("UpdateStatus.InstallLoader"));
+            UIHelper.DisableButton(ref SaveAndPlayButton);
+
+            if (File.Exists(App.CurrentGame.loader.dataDllOriginPath))
+            {
+                await GamesInstall.InstallDLL_Loader(App.CurrentGame, true);
+                await GamesInstall.UpdateDependencies(App.CurrentGame);
+                await Util.CopyFileAsync(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, true);
+            }
+            else
+            {
+                await GamesInstall.InstallDLL_Loader(App.CurrentGame); 
+                await GamesInstall.CheckAndInstallDependencies(App.CurrentGame);
+                UpdateManagerStatusText(Lang.GetString("UpdateStatus.InstallLoader"));
+                //now we can move the loader files to the accurate folders.
+                await Util.MoveFileAsync(App.CurrentGame.loader.dataDllPath, App.CurrentGame.loader.dataDllOriginPath, false);
+                await Util.CopyFileAsync(App.CurrentGame.loader.loaderdllpath, App.CurrentGame.loader.dataDllPath, false);
+
+            }
+
+            await UpdateGameConfig(SetGame.SADX); //To do change with "current selected game" when it's available
+            await EnableOneClickInstall();
+
+            UIHelper.EnableButton(ref SaveAndPlayButton);
+            UpdateManagerStatusText(Lang.GetString("UpdateStatus.LoaderInstalled"));
+            App.CurrentGame.loader.installed = true;
+            UpdateBtnInstallLoader_State();
         }
 
         private async Task HandleLoaderInstall()
@@ -2197,7 +2245,7 @@ namespace SAModManager
             }
 
             //TODO: delete when official release
-            await VanillaTransition.HandleVanillaManagerFiles(App.CurrentGame.loader.installed, App.CurrentGame.gameDirectory);
+            //await VanillaTransition.HandleVanillaManagerFiles(App.CurrentGame.loader.installed, App.CurrentGame.gameDirectory);
 
             App.CurrentGame.loader.installed = !App.CurrentGame.loader.installed;
             UpdateBtnInstallLoader_State();
@@ -2205,5 +2253,19 @@ namespace SAModManager
         #endregion
 
         #endregion
+
+        private void btnHealthCheck_Click(object sender, RoutedEventArgs e)
+        {
+            MessageWindow message = new(Lang.GetString("MessageWindow.Warnings.HealthCheckTitle"), Lang.GetString("MessageWindow.Warnings.HealthCheck"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Caution, button: MessageWindow.Buttons.YesNo);
+
+            message.ShowDialog();
+
+            if (message.isYes != true)
+                return;
+
+            var progress = new HealthChecker(setGame);
+            progress.ShowDialog();
+
+        }
     }
 }

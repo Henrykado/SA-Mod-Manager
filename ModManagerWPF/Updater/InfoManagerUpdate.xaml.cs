@@ -20,7 +20,7 @@ namespace SAModManager.Common
         {
             InitializeComponent();
             UpdateInfoText.Text = changelog;
-            Title = "Loader Updates";
+            Title = "New Mod Loader Updates";
         }
 
         private void CancelUpdate_Click(object sender, RoutedEventArgs e)

@@ -423,7 +423,7 @@ namespace SAModManager.Elements.SADX
 
 			string commandLine = GetTestSpawnCommandLine();
 
-			ProcessStartInfo startInfo = new ProcessStartInfo(executablePath)
+			ProcessStartInfo startInfo = new(executablePath)
 			{
 				WorkingDirectory = App.CurrentGame.gameDirectory,
 				Arguments = commandLine
@@ -613,7 +613,23 @@ namespace SAModManager.Elements.SADX
 			});
 		}
 
-		private void GetSaves()
+        public static string GetSaveNumber(string s)
+        {
+            string number = s[^2..];
+
+            if (int.TryParse(number, out int result))
+            {
+                // The last two characters are numbers
+                if (number[0] == '0')
+                {
+                    number = number.Substring(1);
+                }
+            }
+
+            return number;
+        }
+
+        private void GetSaves()
 		{
 			if (App.CurrentGame.loader.installed)
 			{
@@ -713,7 +729,12 @@ namespace SAModManager.Elements.SADX
 				cmdline.Add("-g " + GameProfile.TestSpawn.GameModeIndex.ToString());
 
 			if (GameProfile.TestSpawn.UseSave && GameProfile.TestSpawn.SaveIndex > -1)
-				cmdline.Add("-s " + GameProfile.TestSpawn.SaveIndex.ToString());
+			{
+                string save = tsComboSave.SelectedValue.ToString();
+                save = GetSaveNumber(save);
+                cmdline.Add("-s " + save);
+            }
+			
 
 			return string.Join(" ", cmdline);
 		}

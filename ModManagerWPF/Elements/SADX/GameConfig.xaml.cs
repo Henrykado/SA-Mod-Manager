@@ -349,7 +349,7 @@ namespace SAModManager.Elements.SADX
 
             if (File.Exists(fullPath))
 			{
-				Process.Start(new ProcessStartInfo { FileName = fullPath, UseShellExecute = true });
+				Process.Start(new ProcessStartInfo { FileName = fullPath, Arguments = "-p1", UseShellExecute = true });
 			}
 		}
 

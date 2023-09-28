@@ -14,6 +14,7 @@ using System.Windows.Controls.Primitives;
 using SAModManager.Configuration;
 using SAModManager.Configuration.SADX;
 using SAModManager.Ini;
+using System.Threading.Tasks;
 
 namespace SAModManager.Elements.SADX
 {
@@ -137,10 +138,6 @@ namespace SAModManager.Elements.SADX
 			}
 		}
 
-		private void chkBorderless_Checked(object sender, RoutedEventArgs e)
-		{
-			chkDynamicBuffers.IsChecked = chkBorderless.IsChecked;
-		}
 
 		private void comboResolutionPreset_SelectedIndexChanged(object sender, SelectionChangedEventArgs e)
 		{
@@ -314,17 +311,19 @@ namespace SAModManager.Elements.SADX
 			string destName = App.CurrentGame.gameDirectory;
 			string fullPath = Path.Combine(destName, fullName);
 
-            Uri uri = new("https://dcmods.unreliable.network/owncloud/data/PiKeyAr/files/Setup/data/AppLauncher.7z" + "\r\n");
-			var DL = new GenericDownloadDialog(uri, "App Launcher", fullName, destName);
-			await DL.StartDL();
-			DL.ShowDialog();
+            btnGetAppLauncher.IsEnabled = false;
+            btnGetAppLauncher.Opacity = LowOpacityBtn;
 
+            Uri uri = new("https://dcmods.unreliable.network/owncloud/data/PiKeyAr/files/Setup/data/AppLauncher.7z" + "\r\n");
+			var DL = new DownloadDialog(uri, "App Launcher", fullName, destName);
+			DL.StartDL();
+
+			await Task.Delay(10);
 			if (DL.done == true)
 			{
 				try
 				{
-					using ArchiveFile archiveFile = new(fullPath);
-					archiveFile.Extract(destName, true);
+                    await Util.Extract(fullPath, destName, true);
 					btnOpenAppLauncher.IsEnabled = true;
 					btnOpenAppLauncher.Opacity = 1;
 					btnGetAppLauncher.Opacity = LowOpacityBtn;
@@ -333,14 +332,21 @@ namespace SAModManager.Elements.SADX
 				}
 				catch
 				{
-					throw new Exception("Failed to extract AppLauncher.");
-				}
+                    btnGetAppLauncher.IsEnabled = true;
+					btnGetAppLauncher.Opacity = 1;
+                    throw new Exception("Failed to extract AppLauncher.");
+                }
 
 				if (File.Exists(fullPath))
 				{
 					File.Delete(fullPath);
                 }
 			}
+			else
+			{
+                btnGetAppLauncher.IsEnabled = true;
+                btnGetAppLauncher.Opacity = 1;
+            }
 		}
 
 		private void btnOpenAppLauncher_Click(object sender, RoutedEventArgs e)
@@ -349,8 +355,8 @@ namespace SAModManager.Elements.SADX
 
             if (File.Exists(fullPath))
 			{
-				Process.Start(new ProcessStartInfo { FileName = fullPath, Arguments = "-p1", UseShellExecute = true });
-			}
+                Process.Start(new ProcessStartInfo { FileName = fullPath, Arguments = "-p1", UseShellExecute = true });
+            }
 		}
 
 		private void UpdateAppLauncherBtn()
@@ -705,11 +711,6 @@ namespace SAModManager.Elements.SADX
 				Mode = BindingMode.TwoWay
 			});
 			chkPause.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnablePauseOnInactive")
-			{
-				Source = GameProfile.Graphics,
-				Mode = BindingMode.TwoWay
-			});
-			chkDynamicBuffers.SetBinding(CheckBox.IsCheckedProperty, new Binding("EnableDynamicBuffer")
 			{
 				Source = GameProfile.Graphics,
 				Mode = BindingMode.TwoWay

@@ -96,6 +96,7 @@
                                     </MenuItem>
                                     <MenuItem x:Name="ModContextDeveloper" Header="{DynamicResource Manager.Tabs.Mods.ContextMenu.Developer}">
                                         <MenuItem x:Name="ModsContextDeveloperManifest" Header="{DynamicResource Manager.Tabs.Mods.ContextMenu.Developer.Manifest}" Click="ModsContextDeveloperManifest_Click"/>
+                                        <MenuItem x:Name="ModsContextDeveloperIgnoreUpdate" Header="{DynamicResource Manager.Tabs.Mods.ContextMenu.Developer.DisableUpdate}" Click="ModsContextDeveloperIgnoreUpdate_Click"/>
                                     </MenuItem>
                                 </ContextMenu>
                             </ListView.ContextMenu>
@@ -252,7 +253,7 @@
 											   Icon="{StaticResource Icons.Deselect}" Content="{DynamicResource CommonStrings.DeselectAll}" Click="btnDeselectAllCode_Click"/>
                         </Grid>
 
-                        <ListView x:Name="CodeListView" Foreground="White" Grid.Column="1" Grid.Row="2" FontSize="13" PreviewKeyDown="CodesList_OnPreviewKeyDown">
+                        <ListView x:Name="CodeListView" Foreground="White" Grid.Column="1" Grid.Row="2" FontSize="13" PreviewKeyDown="CodesList_OnPreviewKeyDown" SelectionChanged="CodeListView_SelectionChanged">
                             <ListView.ItemContainerStyle>
                                 <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
                                     <EventSetter Event="MouseDoubleClick" Handler="CodesView_Item_MouseDoubleClick"/>

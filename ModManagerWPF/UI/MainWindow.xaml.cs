@@ -21,12 +21,10 @@ using Key = System.Windows.Input.Key;
 using SAModManager.UI;
 using SAModManager.Updater;
 using SAModManager.Elements;
-using SevenZipExtractor;
 using SAModManager.Ini;
 using SAModManager.Configuration;
 using ICSharpCode.AvalonEdit.Editing;
 using SAModManager.IniSettings.SA2;
-using System.Reflection;
 
 
 namespace SAModManager
@@ -59,7 +57,7 @@ namespace SAModManager
         readonly Updater.ModUpdater modUpdater = new();
         private object gameConfigFile;
         private DebugSettings gameDebugSettings = new();
-        MenuItem ModContextDev { get; set; }
+
         private bool displayedManifestWarning;
         public MainWindowViewModel ViewModel = new();
         Profiles GameProfiles = new();
@@ -426,6 +424,8 @@ namespace SAModManager
 
                 ConfigureModBtn.IsEnabled = File.Exists(Path.Combine(App.CurrentGame.modDirectory, mod.Tag, "configschema.xml"));
                 ConfigureModBtn_UpdateState();
+
+                textModsDescription.Text = Lang.GetString("CommonStrings.Description") + " " + mods[mod.Tag].Description;
             }
             else if (count > 1)
             {
@@ -437,47 +437,30 @@ namespace SAModManager
         private void ModList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
             bool isEnabled = ConfigureModBtn.IsEnabled;
+            var curMod = (ModData)listMods.SelectedItem;
 
-            if (ModContextMenu is not null)
+            if (ModContextMenu is null || curMod is null)
+                return;
+
+            var item = ModContextMenu.Items.OfType<MenuItem>().FirstOrDefault(item => item.Name == "ModContextConfigureMod");
+
+            if (item is not null)
             {
-                var item = ModContextMenu.Items.OfType<MenuItem>().FirstOrDefault(item => item.Name == "ModContextConfigureMod");
-
-                if (item is not null)
-                {
-                    UIHelper.ToggleMenuItem(ref item, isEnabled);
-                    Image iconConfig = FindName("menuIconConfig") as Image;
-                    UIHelper.ToggleImage(ref menuIconConfig, isEnabled);
-                }
-
-                if (checkDevEnabled.IsChecked == true)
-                {
-                    if (ModContextDev is null)
-                    {
-                        /*
-						ModContextDev = new();
-						MenuItem manifest = new();
-						ModContextDev.Name = "menuDev";
-						ModContextDev.Header = Lang.GetString("ModsUIDev");
-						manifest.Name = "menuManif";
-						manifest.Header = Lang.GetString("ModsUISubDevManifest");
-						ModContextDev.Items.Add(manifest);
-						ModContextMenu.Items.Add(ModContextDev);
-						*/
-                    }
-                }
-                else
-                {
-                    if (ModContextDev is not null)
-                    {
-                        var modDev = ModContextMenu.Items.OfType<MenuItem>().FirstOrDefault(item => item.Name == "menuDev");
-
-                        if (modDev is not null)
-                            ModContextMenu.Items.Remove(modDev);
-                    }
-
-                }
-
+                UIHelper.ToggleMenuItem(ref item, isEnabled);
+                Image iconConfig = FindName("menuIconConfig") as Image;
+                UIHelper.ToggleImage(ref menuIconConfig, isEnabled);
             }
+
+            ModContextDeveloper.Visibility = (bool)checkDevEnabled.IsChecked ? Visibility.Visible : Visibility.Collapsed;
+
+            string UpdateStateString = "Manager.Tabs.Mods.ContextMenu.Developer.DisableUpdate";
+
+            if (mods[curMod.Tag].DisableUpdate == true)
+                UpdateStateString = "Manager.Tabs.Mods.ContextMenu.Developer.EnableUpdate";
+
+            var resource = App.Current.TryFindResource(UpdateStateString);
+            if (resource is not null)
+                ModsContextDeveloperIgnoreUpdate.Header = resource;
         }
 
         private void ModsContextDeveloperManifest_Click(object sender, RoutedEventArgs e)
@@ -500,6 +483,15 @@ namespace SAModManager
                 var modPath = Path.Combine(App.CurrentGame.modDirectory, (string)item.Tag);
                 var manifestPath = Path.Combine(modPath, "mod.manifest");
 
+                var SADXMod = mods[item.Tag];
+
+                if (SADXMod is not null)
+                {
+                    SADXMod.DisableUpdate = false;
+                    string fullPath = Path.Combine(App.CurrentGame.modDirectory, item.Tag, "mod.ini");
+                    IniSerializer.Serialize(SADXMod, fullPath);
+                }
+         
                 List<Updater.ModManifestEntry> manifest;
                 List<Updater.ModManifestDiff> diff;
 
@@ -539,6 +531,29 @@ namespace SAModManager
 
                 Updater.ModManifest.ToFile(manifest, manifestPath);
             }
+        }
+
+        private void ModsContextDeveloperIgnoreUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            var mod = (ModData)listMods.SelectedItem;
+
+            if (mod == null)
+                return;
+
+            SADXModInfo modInfo = mods[mod.Tag];
+
+            if (modInfo.DisableUpdate != true)
+            {
+                var msg = new MessageWindow(Lang.GetString("MessageWindow.DefaultTitle.Warning"), Lang.GetString("MessageWindow.Warnings.DisableUpdates"), MessageWindow.WindowType.IconMessage, MessageWindow.Icons.Warning, MessageWindow.Buttons.YesNo);
+                msg.ShowDialog();
+
+                if (msg.isYes != true)
+                    return;
+            }
+
+            modInfo.DisableUpdate = !modInfo.DisableUpdate;
+            string fullPath = Path.Combine(App.CurrentGame.modDirectory, mod.Tag, "mod.ini");
+            IniSerializer.Serialize(modInfo, fullPath);
         }
 
         private void ModContextOpenFolder_Click(object sender, RoutedEventArgs e)
@@ -731,6 +746,7 @@ namespace SAModManager
 
             var ctrlKey = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
 
+
             if (Keyboard.IsKeyDown(Key.Space))
             {
                 listMods.BeginInit();
@@ -758,7 +774,6 @@ namespace SAModManager
                 OpenAboutModWindow(mod);
                 e.Handled = true;
             }
-
 
             if (Keyboard.IsKeyDown(Key.Delete))
             {
@@ -843,6 +858,7 @@ namespace SAModManager
                     }
                 }
             }
+
             if (Keyboard.IsKeyDown(Key.Escape))
             {
                 if (tcMain.SelectedItem == tabMain)
@@ -906,6 +922,12 @@ namespace SAModManager
             CodeAuthorGrid.Text = Lang.GetString("CommonStrings.Author");
             CodeDescGrid.Text = Lang.GetString("CommonStrings.Description");
             CodeCategoryGrid.Text = Lang.GetString("CommonStrings.Category");
+        }
+
+        private void CodeListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            CodesView_Item_MouseLeave(null, null);
+            CodesView_Item_MouseEnter(sender, null);
         }
 
         private void btnSelectAllCode_Click(object sender, RoutedEventArgs e)
@@ -1255,8 +1277,13 @@ namespace SAModManager
 
         public void UpdateManagerStatusText(string message, int timer = 3000)
         {
-            Dispatcher?.Invoke(() => WhatTheManagerDoin.Text = message);
-            StatusTimer?.Change(timer, Timeout.Infinite);
+            try
+            {
+                Dispatcher?.Invoke(() => WhatTheManagerDoin.Text = message);
+                StatusTimer?.Change(timer, Timeout.Infinite);
+            }
+            catch
+            { }
         }
 
         public string GetCurrentProfileName()
@@ -1666,10 +1693,8 @@ namespace SAModManager
             UIHelper.ToggleImgButton(ref btnCheckUpdates, true);
 
             ModContextChkUpdate.IsEnabled = true;
-            if (ModContextDev is not null)
-            {
-                ModContextDev.IsEnabled = true;
-            }
+
+            ModContextDeveloper.IsEnabled = true;
 
             ModContextDeleteMod.IsEnabled = true;
             ModContextForceModUpdate.IsEnabled = true;
@@ -1696,8 +1721,8 @@ namespace SAModManager
                 UIHelper.ToggleImgButton(ref btnCheckUpdates, false);
                 ModContextChkUpdate.IsEnabled = false;
                 ModContextDeleteMod.IsEnabled = false;
-                if (ModContextDev is not null)
-                    ModContextDev.IsEnabled = false;
+
+                ModContextDeveloper.IsEnabled = false;
                 ModContextForceModUpdate.IsEnabled = false;
                 ModContextVerifyIntegrity.IsEnabled = false;
             });
@@ -1864,10 +1889,7 @@ namespace SAModManager
                     Directory.CreateDirectory(updatePath);
                 }
             }
-            catch (Exception ex)
-            {
-
-            }
+            catch {}
 
             new Updater.ModDownloadDialogWPF(updates, updatePath).ShowDialog();
             await Task.Delay(500);
@@ -2030,6 +2052,8 @@ namespace SAModManager
                 return lvItem.Content as ModData;
             else if (sender is ListView lv)
                 return lv.SelectedItem as ModData;
+            else if (sender is ModData)
+                return sender as ModData;
 
             return null;
         }
@@ -2114,6 +2138,8 @@ namespace SAModManager
                 return lvItem.Content as CodeData;
             else if (sender is ListView lv)
                 return lv.SelectedItem as CodeData;
+            else if (sender is CodeData)
+                return sender as CodeData;
 
 
             return CodeListView.Items[CodeListView.SelectedIndex] as CodeData;
@@ -2208,7 +2234,7 @@ namespace SAModManager
             }
             else
             {
-                await GamesInstall.InstallDLL_Loader(App.CurrentGame); 
+                await GamesInstall.InstallDLL_Loader(App.CurrentGame);
                 await GamesInstall.CheckAndInstallDependencies(App.CurrentGame);
                 UpdateManagerStatusText(Lang.GetString("UpdateStatus.InstallLoader"));
                 //now we can move the loader files to the accurate folders.
@@ -2234,7 +2260,7 @@ namespace SAModManager
             if (App.CurrentGame.loader.installed && File.Exists(App.CurrentGame.loader.dataDllOriginPath))
             {
                 UIHelper.DisableButton(ref SaveAndPlayButton);
-    
+
                 UpdateManagerStatusText(Lang.GetString("UpdateStatus.UninstallLoader"));
 
                 File.Delete(App.CurrentGame.loader.dataDllPath);

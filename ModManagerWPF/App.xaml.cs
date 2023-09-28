@@ -35,8 +35,9 @@ namespace SAModManager
         public static string VersionString = $"{Version.Major}.{Version.Minor}.{Version.Revision}";
         public static readonly string ConfigFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SAManager");
         public static readonly string extLibPath = Path.Combine(ConfigFolder, "extlib");
+        public static readonly string ziplibPath = Path.Combine(extLibPath, "7z/7z.dll");
 
-		public static string ManagerConfigFile = Path.Combine(ConfigFolder, "Manager.json");
+        public static string ManagerConfigFile = Path.Combine(ConfigFolder, "Manager.json");
         public static ManagerSettings ManagerSettings { get; set; }
 
         private static readonly Mutex mutex = new(true, pipeName);
@@ -288,7 +289,7 @@ namespace SAModManager
                 return false;
             }
 
-            var manager = new InfoManagerUpdate(update.Item2, update.Item3, changelog);
+            var manager = new InfoManagerUpdate(changelog);
             manager.ShowDialog();
 
             if (manager.DialogResult != true)
@@ -297,8 +298,8 @@ namespace SAModManager
             string dlLink = string.Format(SAModManager.Properties.Resources.URL_SAMM_UPDATE, update.Item2.CheckSuiteID, update.Item3.Id);
             Directory.CreateDirectory(".SATemp");
             var dl = new ManagerUpdate(dlLink, ".SATemp", update.Item3.Name + ".zip");
-            await dl.StartManagerDL();
-            dl.ShowDialog();
+            dl.StartManagerDL();
+  
             ((MainWindow)System.Windows.Application.Current.MainWindow).Close();
 
             return true;
@@ -342,7 +343,7 @@ namespace SAModManager
                 return false;
             }
 
-            var manager = new InfoManagerUpdate(changelog);
+            var manager = new InfoManagerUpdate(changelog, App.CurrentGame.loader.name);
             manager.ShowDialog();
 
             if (manager.DialogResult != true)

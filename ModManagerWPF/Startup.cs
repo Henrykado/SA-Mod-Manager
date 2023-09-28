@@ -103,9 +103,9 @@ namespace SAModManager
                     {
 
                         Uri uri = new(VCURLs[i] + "\r\n");
-                        var DL = new GenericDownloadDialog(uri, "Visual C++", "vc_redist.x86.exe");
+                        var DL = new DownloadDialog(uri, "Visual C++", "vc_redist.x86.exe");
 
-                        await DL.StartDL();
+                        DL.StartDL();
                         DL.ShowDialog();
 
                         if (DL.done)
@@ -134,14 +134,13 @@ namespace SAModManager
                 GamesInstall.SetDependencyPath();
                 Directory.CreateDirectory(App.ConfigFolder);
 
-
                 if (!File.Exists(App.ManagerConfigFile)) //If config page isn't found, assume this is the first boot.
                 {
                     await EnableOneClickInstall();
                     await SetLanguageFirstBoot();
-
-
+                    await Util.Install7Zip();
                 }
+
             }
             catch
             {

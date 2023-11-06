@@ -246,7 +246,7 @@ namespace SAModManager
         private static readonly string owner = "X-Hax";
         private static readonly string repo = "SA-Mod-Manager";
         private static readonly string AppName = "SA Mod Manager";
-        private static readonly string branch = "wpf-public-demo";
+        private static readonly string branch = "master";
 
 
         public static async Task<GitHubAction> GetLatestAction()
@@ -269,7 +269,6 @@ namespace SAModManager
                     {
                         return actions.Actions[0]; // The first workflow run in the list is the most recent one
                     }
-
                 }
 
                 Console.WriteLine($"Error: {response.StatusCode}");

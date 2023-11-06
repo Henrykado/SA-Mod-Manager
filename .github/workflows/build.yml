@@ -2,12 +2,12 @@ name: Windows Build and Publish
 
 on:
   push:
-    branches:
-      - wpf-public-demo
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
 
 env:
   # Path to the WPF project file relative to the root of the project.
-  WPF_PROJECT_FILE: ./ModManagerWPF/SAModManager.csproj
+  WPF_PROJECT_FILE: ./SA-Mod-Manager/SAModManager.csproj
 
 jobs:
   build:
@@ -22,50 +22,53 @@ jobs:
 
     - name: Add Git hash to resources
       working-directory: ${{env.GITHUB_WORKSPACE}}
-      run: echo ${{github.sha}} > ModManagerWPF/Resources/Version.txt
-
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v1.3.1
+      run: echo ${{github.sha}} > SA-Mod-Manager/Resources/Version.txt
 
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: '7.x' # Use a valid .NET SDK version here
+        dotnet-version: '7.0' 
 
     - name: Restore NuGet packages
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run: dotnet restore ${{env.WPF_PROJECT_FILE}}
 
-    - name: Build 64-bit
-      working-directory: ${{env.GITHUB_WORKSPACE}}
-      run: msbuild /m /p:Configuration=${{matrix.configuration}} /p:Platform=x64 ${{env.WPF_PROJECT_FILE}}
-
     - name: Publish 64-bit WPF application
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run: dotnet publish -p:PublishSingleFile=true -r win-x64 -c Release --self-contained false
-
+      
     - name: CleanUp Misc Files (64-bit)
       working-directory: ${{github.workspace}}\bin\Release\net7.0-windows\win-x64\publish
       run: del SAModManager.dll.config, SAModManager.pdb
       
-    - name: Build 32-bit
-      working-directory: ${{env.GITHUB_WORKSPACE}}
-      run: msbuild /m /p:Configuration=${{matrix.configuration}} /p:Platform=x86 ${{env.WPF_PROJECT_FILE}}
-
     - name: Publish 32-bit WPF application
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run: dotnet publish -p:PublishSingleFile=true -r win-x86 -c Release --self-contained false
-
+      
     - name: CleanUp Misc Files (32-bit)
       working-directory: ${{github.workspace}}\bin\Release\net7.0-windows\win-x86\publish
       run: del SAModManager.dll.config, SAModManager.pdb
-
-    - uses: actions/upload-artifact@v3.1.2
+      
+    - name: Archive 64-bit
+      uses: thedoctor0/zip-release@0.7.5
       with:
-        name: ModManagerWPF-Release-x64
-        path: ${{github.workspace}}\bin\Release\net7.0-windows\win-x64\publish
-
-    - uses: actions/upload-artifact@v3.1.2
+        type: 'zip'
+        filename: 'release_x64.zip'
+        directory: bin/Release/net7.0-windows/win-x64/publish
+        exclusions: '*.git* /*node_modules/* .editorconfig'
+        
+    - name: Archive 32-bit
+      uses: thedoctor0/zip-release@0.7.5
       with:
-        name: ModManagerWPF-Release-x86
-        path: ${{github.workspace}}\bin\Release\net7.0-windows\win-x86\publish
+        type: 'zip'
+        filename: 'release_x86.zip'
+        directory: bin/Release/net7.0-windows/win-x86/publish
+        exclusions: '*.git* /*node_modules/* .editorconfig'
+      
+    - name: Create Release
+      uses: softprops/action-gh-release@v0.1.15
+      with:
+        files: |
+         bin/Release/net7.0-windows/win-x64/publish/*.zip
+         bin/Release/net7.0-windows/win-x86/publish/*.zip
+        token: ${{ secrets.GITHUB_TOKEN }}

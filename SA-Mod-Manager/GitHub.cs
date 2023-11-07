@@ -1,5 +1,4 @@
 ﻿using System.Threading.Tasks;
-using SAModManager.Properties;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Net.Http;
@@ -7,10 +6,9 @@ using System;
 using System.Linq;
 using static SAModManager.WorkflowRunInfo;
 using static SAModManager.GitHubAction;
-using NetCoreInstallChecker.Misc;
 using static SAModManager.GitHubArtifact;
-using System.Linq.Expressions;
-using System.Security.Policy;
+using static SAModManager.WorkflowRunInfo.GitHubTagInfo;
+using System.Text.RegularExpressions;
 
 namespace SAModManager
 {
@@ -158,6 +156,22 @@ namespace SAModManager
         // ...
     }
 
+    public class Commit
+    {
+        public string sha { get; set; }
+        public CommitDetails commit { get; set; }
+    }
+
+    public class CommitDetails
+    {
+        public string message { get; set; }
+    }
+
+    public class CommitComparisonResponse
+    {
+        public List<Commit> commits { get; set; }
+    }
+
     public class AuthorInfo
     {
         [JsonProperty("name")]
@@ -239,6 +253,33 @@ namespace SAModManager
             [JsonProperty("workflow_runs")]
             public List<WorkflowRunInfo> Runs { get; set; }
         }
+
+        public class GitHubTag
+        {
+            [JsonProperty("object")]
+            public GitHubTagObject Object { get; set; }
+        }
+
+        public class GitHubTagObject
+        {
+            [JsonProperty("sha")]
+            public string Sha { get; set; }
+        }
+
+        public class GitHubTagInfo
+        {
+            [JsonProperty("name")]
+            public string TagName { get; set; }
+
+            [JsonProperty("commit")]
+            public GitHubCommit Commit { get; set; }
+        }
+
+        public class GitHubCommit
+        {
+            [JsonProperty("sha")]
+            public string Sha { get; set; }
+        }
     }
 
     public static class GitHub
@@ -246,7 +287,7 @@ namespace SAModManager
         private static readonly string owner = "X-Hax";
         private static readonly string repo = "SA-Mod-Manager";
         private static readonly string AppName = "SA Mod Manager";
-        private static readonly string branch = "master";
+        private static readonly string branch = "master"; //case-sensitive
 
 
         public static async Task<GitHubAction> GetLatestAction()
@@ -269,6 +310,7 @@ namespace SAModManager
                     {
                         return actions.Actions[0]; // The first workflow run in the list is the most recent one
                     }
+
                 }
 
                 Console.WriteLine($"Error: {response.StatusCode}");
@@ -281,7 +323,7 @@ namespace SAModManager
         {
             using (var httpClient = new HttpClient())
             {
-                httpClient.DefaultRequestHeaders.Add("User-Agent", AppName); 
+                httpClient.DefaultRequestHeaders.Add("User-Agent", AppName);
 
                 string apiUrl = $"https://api.github.com/repos/{owner}/{repo}/actions/runs/{actionId}/artifacts";
 
@@ -303,6 +345,7 @@ namespace SAModManager
             }
         }
 
+        //left over from previous update system
         public static async Task<WorkflowRunInfo> GetLatestWorkflowRun()
         {
             using (var httpClient = new HttpClient())
@@ -322,9 +365,9 @@ namespace SAModManager
                     {
                         for (int i = 0; i < apiResponse.Runs.Count; i++)
                         {
-                            if (apiResponse.Runs[i].HeadBranch.ToLower() == branch.ToLower())
+                            if (apiResponse.Runs[i].HeadBranch.ToLower() == branch.ToLower()) //only get builds from the current branch.
                             {
-                                return apiResponse.Runs[i];
+                                return apiResponse.Runs[i]; //return the first build that contains the right branch, this should be the last update every time.
                             }
                         }
                     }
@@ -335,8 +378,27 @@ namespace SAModManager
             }
         }
 
-        public static async Task<GitHubAsset> GetLatestRelease()
+        private static async Task<string> GetSHAFromLastTag(GitHubRelease release, HttpClient httpClient)
         {
+            string lastTagName = release.TagName;
+            string urlTag = $"https://api.github.com/repos/{owner}/{repo}/tags";
+            using var responseHtmlTAG = await httpClient.GetAsync(urlTag);
+
+            if (!responseHtmlTAG.IsSuccessStatusCode)
+                return null;
+
+            var tagResponse = await responseHtmlTAG.Content.ReadAsStringAsync();
+            var tagInfo = JsonConvert.DeserializeObject<List<GitHubTagInfo>>(tagResponse);
+            var lastTag = tagInfo?.FirstOrDefault(hash => hash.TagName.Contains(lastTagName));
+
+            return lastTag?.Commit.Sha;
+        }
+
+
+        public static async Task<(bool, string, GitHubAsset)> GetLatestManagerRelease()
+        {
+            bool hasUpdate = false;
+
             try
             {
                 var httpClient = new HttpClient();
@@ -353,10 +415,25 @@ namespace SAModManager
                     if (release != null && release.Assets != null)
                     {
                         var targetAsset = release.Assets.FirstOrDefault(asset => asset.Name.Contains(Environment.Is64BitOperatingSystem ? "x64" : "x86"));
-
                         if (targetAsset != null)
                         {
-                            return targetAsset;
+                            string sha = await GetSHAFromLastTag(release, httpClient);
+                            string version = release.TagName;
+
+                            try
+                            {
+                                string pattern = @"^\w+\s+"; // This regular expression matches any word followed by one or more spaces at the beginning of the string.
+                                string result = Regex.Replace(version, pattern, "").Trim();
+                                Version commitVersion = new(result);
+                                int comparison = commitVersion.CompareTo(App.Version);
+                                hasUpdate = comparison > 0;
+                            }
+                            catch
+                            {
+                                throw new Exception("Couldn't check version difference, update won't work.");
+                            }
+
+                            return (hasUpdate, sha, targetAsset);
                         }
                     }
                 }
@@ -366,44 +443,65 @@ namespace SAModManager
                 Console.WriteLine("Error fetching latest release: " + ex.Message);
             }
 
-            return null;
+            return (false, null, null);
         }
 
         public static async Task<string> GetGitChangeLog(string hash)
         {
             var httpClient = new HttpClient();
 
-            httpClient.DefaultRequestHeaders.Add("User-Agent", AppName); 
-            string apiUrl = $"https://api.github.com/repos/{owner}/{repo}/commits?sha={hash}&per_page=100&sha={branch}";
+            httpClient.DefaultRequestHeaders.Add("User-Agent", AppName);
+
+            // string apiUrl = $"https://api.github.com/repos/{owner}/{repo}/commits?sha={hash}&per_page=100&sha={branch}";
+
+            bool isEmpty = string.IsNullOrEmpty(App.RepoCommit); //empty means we are on dev version
+            string apiUrl = isEmpty == false ? $"https://api.github.com/repos/{owner}/{repo}/compare/{App.RepoCommit}...{hash[..7]}" : $"https://api.github.com/repos/{owner}/{repo}/commits?sha={hash}&per_page=100&sha={branch}"; 
 
             HttpResponseMessage response = await httpClient.GetAsync(apiUrl);
             string text = "";
 
-
             if (response.IsSuccessStatusCode)
             {
                 string jsonResult = await response.Content.ReadAsStringAsync();
-                var info = JsonConvert.DeserializeObject<GHCommitInfo[]>(jsonResult);
-              
-                int limit = info.ToList().FindIndex(t => t.SHA == App.RepoCommit);
-                if (limit == -1)
-                    limit = info.Length;
-
-                for (int i = 0; i < limit; ++i)
+          
+                if (isEmpty) //if we are on dev version get the last 100 commits
                 {
-                    if (info[i].Commit.IsSkipCI())
-                        continue;
+                    var info = JsonConvert.DeserializeObject<GHCommitInfo[]>(jsonResult);
 
-                    string message = info[i].Commit.Message.Replace("\r", "");
-                    if (message.Contains("\n"))
-                        message = message[..message.IndexOf("\n", StringComparison.Ordinal)];
+                    int limit = info.ToList().FindIndex(t => t.SHA == App.RepoCommit);
+                    if (limit == -1)
+                        limit = info.Length;
 
-                    text += $" - {info[i].SHA[..7]} - {message}\n";
+                    for (int i = 0; i < limit; ++i)
+                    {
+                        if (info[i].Commit.IsSkipCI())
+                            continue;
+
+                        string message = info[i].Commit.Message.Replace("\r", "");
+                        if (message.Contains("\n"))
+                            message = message[..message.IndexOf("\n", StringComparison.Ordinal)];
+
+                        text += " - " + message + "\n";
+                    }
+                }
+                else //get all the commits between new version and current version
+                {
+                    var info = JsonConvert.DeserializeObject<CommitComparisonResponse>(jsonResult);
+                    
+                    foreach (var commit in info.commits)
+                    {
+                        //we skip the message "merge branch master" thing as the end user wouldn't understand
+                        if (commit.commit.message.Contains("Merge branch") && text.Length > 5)
+                            continue;
+
+                        text += " - " + commit.commit.message + "\n";
+                    }
                 }
             }
 
             return text;
         }
+
 
         public static async Task<string> GetGitLoaderChangeLog(string hash)
         {
@@ -439,6 +537,7 @@ namespace SAModManager
 
             return text;
         }
+
 
         private static async Task<string> GetLastCommitHash(string repo, string branch)
         {

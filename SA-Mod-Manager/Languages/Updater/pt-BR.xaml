@@ -4,18 +4,18 @@
 	xmlns:system="clr-namespace:System;assembly=mscorlib">
 
     <!--Dependencies-->
-    <system:String x:Key="Updater.DL.Dep.Download">Baixar</system:String>
-    <system:String x:Key="Updater.DL.Dep.Install">Instalar</system:String>
-    <system:String x:Key="Updater.DL.Dep.Update">Atualizar</system:String>
+    <system:String x:Key="Updater.DL.Dep.Download">Download</system:String>
+    <system:String x:Key="Updater.DL.Dep.Install">Instalação</system:String>
+    <system:String x:Key="Updater.DL.Dep.Update">Atualização</system:String>
     <system:String x:Key="Updater.DL.Dep.Downloading">Baixando</system:String>
     <system:String x:Key="Updater.DL.Dep.Installing">Instalando</system:String>
     <system:String x:Key="Updater.DL.Dep.Updating">Atualizando</system:String>
-    <system:String x:Key="Updater.DL.Dep.Completed">Concluído.</system:String>
+    <system:String x:Key="Updater.DL.Dep.Completed">Concluído(a).</system:String>
     <system:String x:Key="Updater.DL.Dep.Copying">Copiando arquivos...</system:String>
 
-    <system:String x:Key="Updater.DL.Offline.Title">Offline Installation</system:String>
-    <system:String x:Key="Updater.DL.Offline.Failed">Failed to download {0}</system:String>
-    <system:String x:Key="Updater.DL.Offline.InstallAttempt">Trying offline installation, please wait...</system:String>
+    <system:String x:Key="Updater.DL.Offline.Title">Instalação Offline</system:String>
+    <system:String x:Key="Updater.DL.Offline.Failed">Falha ao baixar {0}</system:String>
+    <system:String x:Key="Updater.DL.Offline.InstallAttempt">Tentando a instalação offline, por favor aguarde...</system:String>
 
     <!--Mod Update-->
     <system:String x:Key="Updater.DL.Mod.Extracting">Extraindo...</system:String>
